@@ -7,7 +7,7 @@ import {
   type NarrationPriority,
   type UserInputReason,
 } from "@/lib/contracts";
-import { AbortedError, abortable, withTimeout } from "./errors";
+import { AbortedError, abortable, sleep, withTimeout } from "./errors";
 import { detectHandoff, elementAt, handoffInstructions, maskIfSensitive } from "./sensitive";
 import {
   DEFAULT_LIMITS,
@@ -21,6 +21,10 @@ import {
   type Progress,
   type TaskControl,
 } from "./types";
+
+/** How long and how often to re-look at a page before treating it as settled. */
+const SETTLE_PAUSE_MS = 150;
+const SETTLE_LOOKS = 5;
 
 const ASSERTIVE: ReadonlySet<Progress["kind"]> = new Set([
   "needs_info",
@@ -417,19 +421,37 @@ export async function runTask(
     }
   }
 
-  /** The page as of this result. Uses what the browser sent, and looks again only for what is missing. */
+  /**
+   * The page as of this result, once it has stopped changing. A page keeps settling for a moment after
+   * an action (focus, scrolling, transitions), so the view captured right after the action is not the
+   * one the next click will be checked against. Clicks name the view they were planned from, so wait
+   * until two looks in a row agree before planning from it.
+   */
   async function currentView(result: ActionResult, previous: Observation): Promise<Observation> {
-    if (result.screenshot && result.pageContext) {
-      return {
-        ...(result.observationId ? { observationId: result.observationId } : {}),
-        screenshot: result.screenshot,
-        pageContext: result.pageContext,
-      };
+    const first: Observation | undefined =
+      result.screenshot && result.pageContext
+        ? {
+            ...(result.observationId ? { observationId: result.observationId } : {}),
+            screenshot: result.screenshot,
+            pageContext: result.pageContext,
+          }
+        : undefined;
+    if (first && !first.observationId) return first; // nothing to settle without view ids
+
+    let latest: Observation | undefined = first;
+    for (let look = 0; look < SETTLE_LOOKS; look++) {
+      if (latest) await sleep(SETTLE_PAUSE_MS, signal);
+      let next: Observation;
+      try {
+        next = await abortable(browser!.observe(), signal);
+      } catch (error) {
+        if (error instanceof AbortedError) throw error;
+        return latest ?? previous;
+      }
+      if (!next.observationId || next.observationId === latest?.observationId) return next;
+      latest = next;
     }
-    return abortable(browser!.observe(), signal).catch((error: unknown) => {
-      if (error instanceof AbortedError) throw error;
-      return previous;
-    });
+    return latest ?? previous;
   }
 
   /** Tells the user what to do, waits for Continue, and returns the fresh view (or null if stopped). */

@@ -196,4 +196,38 @@ describe("createLabelDrivenActions", () => {
     for (let i = 0; i < 10; i++) last = await ask(provider, empty);
     expect(last).toMatchObject({ kind: "fail" });
   });
+
+  it("retries a step that failed instead of declaring victory, then says so honestly", async () => {
+    const provider = createLabelDrivenActions(
+      [{ click: "Submit application", commits: true }],
+      "ok",
+    );
+    const first = await ask(provider, withButton);
+    if (first.kind !== "action") throw new Error("expected an action");
+    const history = [{ action: first.action, outcome: "failed" as const }];
+    const again = await provider.nextAction({
+      goal: "g",
+      screenshot: shot,
+      pageContext: withButton,
+      history,
+    });
+    expect(again).toMatchObject({
+      kind: "action",
+      action: { type: "click", label: "Submit application" },
+    });
+    const third = await provider.nextAction({
+      goal: "g",
+      screenshot: shot,
+      pageContext: withButton,
+      history,
+    });
+    expect(third).toMatchObject({ kind: "action" });
+    const last = await provider.nextAction({
+      goal: "g",
+      screenshot: shot,
+      pageContext: withButton,
+      history,
+    });
+    expect(last).toMatchObject({ kind: "fail" });
+  });
 });

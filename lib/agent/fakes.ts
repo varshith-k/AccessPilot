@@ -148,20 +148,38 @@ export type LabelStep = { click: string; commits?: boolean } | { type: string; i
  */
 export function createLabelDrivenActions(steps: LabelStep[], doneSummary: string): ActionProvider {
   const MAX_SCROLLS = 6;
+  const MAX_RETRIES = 2;
   let index = 0;
   let scrolls = 0;
+  let retries = 0;
   let id = 0;
+  let advancedLast = false;
   const find = (page: BrowserPageContext | undefined, name: string) =>
     page?.elements.find((el) => el.bounds && el.label.toLowerCase().includes(name.toLowerCase()));
 
   return {
-    async nextAction({ pageContext }): Promise<NextAction> {
+    async nextAction({ pageContext, history }): Promise<NextAction> {
+      // A step that failed was not done: try it again from the fresh page, a couple of times, then say so.
+      if (history.at(-1)?.outcome === "failed" && advancedLast) {
+        if (retries++ >= MAX_RETRIES) {
+          return {
+            kind: "fail",
+            message: "I couldn't complete one of the steps, so I stopped. Nothing was submitted.",
+          };
+        }
+        index--;
+      } else if (history.at(-1)?.outcome === "executed") {
+        retries = 0;
+      }
+      advancedLast = false;
+
       const step = steps[index];
       if (!step) return { kind: "done", summary: doneSummary };
       const actionId = `script_${++id}`;
 
       if ("type" in step) {
         index++;
+        advancedLast = true;
         return {
           kind: "action",
           action: { id: actionId, type: "type", text: step.type, label: step.into, commits: false },
@@ -181,6 +199,7 @@ export function createLabelDrivenActions(steps: LabelStep[], doneSummary: string
       }
       scrolls = 0;
       index++;
+      advancedLast = true;
       return {
         kind: "action",
         action: {

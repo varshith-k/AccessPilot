@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AddressInfo } from "node:net";
+import { createDemoServer } from "../../demo-site/scholarship-server.mjs";
 import { startDemoSite } from "../../demo-site/server";
 import { createRealBrowserFactory } from "../../lib/agent/browserDriver";
 import { SCHOLARSHIP_STEPS, createFakeDeps, createLabelDrivenActions } from "../../lib/agent/fakes";
@@ -111,5 +113,48 @@ describe("orchestrator + real Chromium + demo site", () => {
       code: "cannot_continue",
       recoverable: true,
     });
+  });
+});
+
+describe("the scholarship form that needs scrolling and a settled page", () => {
+  it("really submits: the browser ends on the confirmation page, not just a 'done' message", async () => {
+    const server = createDemoServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/scholarship`;
+    try {
+      const store = new TaskStore();
+      const task = store.create(url, "Apply");
+      const deps: AgentDeps = {
+        ...createFakeDeps({ stepDelayMs: 0 }),
+        createBrowser: createRealBrowserFactory(),
+        actions: createLabelDrivenActions(SCHOLARSHIP_STEPS, "Submitted."),
+      };
+      const finished = runTask(
+        deps,
+        task,
+        { url, goal: "Apply" },
+        { ...DEFAULT_LIMITS, narrationTimeoutMs: 300 },
+      );
+
+      await vi.waitFor(
+        () => {
+          if (!task.events.some((e) => e.type === "approval.required")) throw new Error("not yet");
+        },
+        { timeout: 25_000, interval: 100 },
+      );
+      const approval = task.events.find((e) => e.type === "approval.required");
+      expect(
+        task.events.some((e) => e.type === "step.completed" && e.description.includes("Scrolled")),
+      ).toBe(true);
+      store.approve(task.id, approval && "approvalId" in approval ? approval.approvalId : "");
+      await finished;
+
+      const alts = task.events.flatMap((e) => (e.type === "screenshot" ? [e.alt] : []));
+      expect(alts.at(-1)).toMatch(/^Application submitted\./);
+      expect(task.events.at(-1)?.type).toBe("task.completed");
+      expect(task.events.some((e) => e.type === "task.failed")).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

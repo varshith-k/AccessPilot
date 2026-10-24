@@ -595,24 +595,44 @@ describe("working with the real browser controller's protocol", () => {
     expect(seen).toEqual(["obs-1", "obs-2"]);
   });
 
-  it("uses the page a failed result carries instead of looking again", async () => {
-    const observe = vi.fn(async () => view("obs-looked-again"));
+  it("waits for the page to settle before planning from it", async () => {
+    // The page keeps changing for a moment after an action: obs-2 is the early view, obs-3 the settled one.
+    const looks = ["obs-3", "obs-3"];
+    const stamped: Array<string | undefined> = [];
     const { deps } = makeDeps(
-      [act(click("a", 5, 5, "Name")), done()],
+      [act(click("a", 5, 5, "Name")), act(click("b", 5, 5, "Name")), done()],
       {},
       {
         open: async () => view("obs-1"),
-        observe,
-        execute: vi.fn(async (a) => ({
-          actionId: a.id,
-          status: "failed" as const,
-          error: { code: "stale_observation", message: "changed" },
-          ...view("obs-from-failure"),
-        })),
+        observe: vi.fn(async () => view(looks.shift() ?? "obs-3")),
+        execute: vi.fn(async (a) => {
+          stamped.push("observationId" in a ? a.observationId : undefined);
+          return {
+            actionId: a.id,
+            status: "executed" as const,
+            verification: "passed" as const,
+            ...view("obs-2"),
+          };
+        }),
       },
     );
     const run = start(deps);
     await run.finished;
-    expect(observe).not.toHaveBeenCalled();
+    expect(stamped).toEqual(["obs-1", "obs-3"]); // the second click names the settled view, not the early one
+  });
+
+  it("still moves on if the page never settles", async () => {
+    let n = 0;
+    const { deps } = makeDeps(
+      [act(click("a", 5, 5, "Name")), done()],
+      {},
+      {
+        open: async () => view("obs-0"),
+        observe: vi.fn(async () => view(`obs-${++n}`)),
+      },
+    );
+    const run = start(deps);
+    await run.finished;
+    expect(run.last()?.type).toBe("task.completed");
   });
 });
