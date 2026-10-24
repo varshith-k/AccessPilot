@@ -206,8 +206,9 @@ AccessPilot targets **WCAG 2.2 AA**:
   can be picked up by it. Wait for it to finish, or silence it first (Control in NVDA and JAWS).
 - Voice commands are English only.
 - Testing with NVDA, JAWS, and VoiceOver has not been done yet; automated checks can't replace it.
-- The frontend has been tested against mock data only. `HttpTaskClient` follows the contract and
-  has unit tests, but it hasn't run against the real backend yet.
+- The frontend hasn't run against the real backend yet. An integration test runs the full flow
+  through `HttpTaskClient` against a fake backend that follows the contract, so the switch to
+  `NEXT_PUBLIC_TASK_CLIENT=http` should only need the backend to match `docs/CONTRACT.md`.
 - Mock screenshots are simple wireframes, not real pages.
 - Stop is instant in the UI, but halting the real browser depends on the backend honoring `/stop`.
 
