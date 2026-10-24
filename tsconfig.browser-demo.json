@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "noEmit": false,
+    "incremental": false,
+    "rootDir": ".",
+    "outDir": ".cache/browser-demo",
+    "types": ["node"]
+  },
+  "include": ["scripts/browser-demo.ts"],
+  "exclude": ["node_modules", ".cache"]
+}
