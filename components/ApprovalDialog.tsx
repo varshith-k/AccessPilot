@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type RefObject, type SyntheticEvent } from "react";
 import type { PendingApproval } from "@/lib/client/taskState";
+import { ShieldIcon } from "./ui/icons";
 import { buttonStyles } from "./ui/styles";
 
 export interface ApprovalDialogProps {
@@ -14,6 +15,9 @@ export interface ApprovalDialogProps {
   /** How to answer by voice, shown when voice input is available. */
   voiceHint?: string | undefined;
 }
+
+const dialogStyles =
+  "m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-card border border-border bg-elevated p-0 text-fg shadow-dialog";
 
 /**
  * Modal confirmation before anything consequential. Focus starts on the heading, never on
@@ -64,31 +68,52 @@ export function ApprovalDialog({
       aria-describedby={summaryId}
       onCancel={handleCancel}
       onClose={handleClose}
-      className="m-auto w-[min(40rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border-2 border-border bg-bg p-0 text-fg backdrop:bg-black/60"
+      className={`${dialogStyles} w-[min(36rem,calc(100vw-2rem))]`}
     >
       {approval && (
-        <div className="space-y-4 p-5">
-          <h2 ref={headingRef} id={headingId} tabIndex={-1} className="text-2xl font-bold">
-            Approval needed: {approval.action}
-          </h2>
-          <p id={summaryId}>{approval.summary}</p>
+        <div className="space-y-5 p-6">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning">
+              <ShieldIcon className="size-5" />
+            </span>
+            <div className="min-w-0 space-y-1">
+              <h2
+                ref={headingRef}
+                id={headingId}
+                tabIndex={-1}
+                className="text-lg font-semibold leading-snug tracking-tight focus:outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+              >
+                Approval needed: {approval.action}
+              </h2>
+              <p id={summaryId} className="text-sm text-muted">
+                {approval.summary}
+              </p>
+            </div>
+          </div>
           {approval.fields.length > 0 && (
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-md border border-border bg-surface p-3 sm:grid-cols-[max-content_1fr]">
+            <dl className="divide-y divide-border overflow-hidden rounded-control border border-border bg-subtle text-sm">
               {approval.fields.map((field, index) => (
-                <div key={`${field.label}-${index}`} className="contents">
-                  <dt className="font-semibold">{field.label}</dt>
-                  <dd className="mb-2 break-words sm:mb-0">
-                    {field.value === "" ? <span className="text-muted">(empty)</span> : field.value}
+                <div
+                  key={`${field.label}-${index}`}
+                  className="grid grid-cols-1 gap-x-4 gap-y-0.5 px-4 py-2.5 sm:grid-cols-[minmax(7rem,max-content)_1fr]"
+                >
+                  <dt className="text-muted">{field.label}</dt>
+                  <dd className="break-words font-medium">
+                    {field.value === "" ? (
+                      <span className="font-normal text-muted">(empty)</span>
+                    ) : (
+                      field.value
+                    )}
                   </dd>
                 </div>
               ))}
             </dl>
           )}
-          <p className="text-sm text-muted">
+          <p className="text-[13px] leading-5 text-muted">
             Nothing is submitted until you choose. Pressing Escape means Don&apos;t submit.
             {voiceHint && ` ${voiceHint}`}
           </p>
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
             <button type="button" onClick={onDeny} className={buttonStyles.secondary}>
               Don&apos;t submit
             </button>
