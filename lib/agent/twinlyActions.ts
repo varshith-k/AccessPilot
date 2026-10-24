@@ -7,6 +7,8 @@ import {
   type NextActionResult,
   type ScreenElement,
 } from "@/lib/twinly/client";
+import { elementAt } from "./sensitive";
+import { labelsMatch } from "./snap";
 import type { ActionHistoryItem, ActionProvider, NextAction } from "./types";
 
 /** The part of `TwinlyClient` the agent uses, so tests can stand in for the network. */
@@ -61,7 +63,40 @@ function describeFailure(error: unknown): string {
   return "I couldn't get the next step from Twinly. Please try again.";
 }
 
-function toBrowserAction(proposed: ProposedAction, id: string): BrowserAction | null {
+/**
+ * Twinly documents its answers as a 0 to 1000 grid, but the same request sometimes comes back in image
+ * pixels instead (640, 346 for a field whose grid position is 500, 481). Read an ambiguous click both
+ * ways and keep the reading that lands on a control carrying the name Twinly gave. If neither does,
+ * or both do, use the documented grid reading.
+ */
+export function resolveClickPoint(
+  proposed: Extract<ProposedAction, { type: "click" | "double_click" }>,
+  page: BrowserPageContext | undefined,
+  size: { width: number; height: number },
+): { x: number; y: number } {
+  const asGrid = proposed.point;
+  const { x: rawX, y: rawY } = proposed.raw;
+  if (rawX === undefined || rawY === undefined || !page) return asGrid;
+  const asPixels = {
+    x: Math.min(Math.max(Math.round(rawX), 0), size.width - 1),
+    y: Math.min(Math.max(Math.round(rawY), 0), size.height - 1),
+  };
+  if (Math.abs(asPixels.x - asGrid.x) <= 2 && Math.abs(asPixels.y - asGrid.y) <= 2) return asGrid;
+
+  const score = (point: { x: number; y: number }): number => {
+    const control = elementAt(page, point.x, point.y);
+    if (!control) return 0;
+    return proposed.label && labelsMatch(proposed.label, control.label) ? 2 : 1;
+  };
+  return score(asPixels) > score(asGrid) ? asPixels : asGrid;
+}
+
+function toBrowserAction(
+  proposed: ProposedAction,
+  id: string,
+  page: BrowserPageContext | undefined,
+  size: { width: number; height: number },
+): BrowserAction | null {
   const meta = {
     id,
     commits: proposed.requiresApproval,
@@ -70,8 +105,10 @@ function toBrowserAction(proposed: ProposedAction, id: string): BrowserAction | 
   };
   switch (proposed.type) {
     case "click":
-    case "double_click":
-      return { ...meta, type: proposed.type, x: proposed.point.x, y: proposed.point.y };
+    case "double_click": {
+      const point = resolveClickPoint(proposed, page, size);
+      return { ...meta, type: proposed.type, x: point.x, y: point.y };
+    }
     case "type":
       return { ...meta, type: "type", text: proposed.text };
     case "key":
@@ -147,6 +184,15 @@ export function createTwinlyActions(
         return { kind: "fail", message: describeFailure(error) };
       }
       previousScreenshot = screenshot.imageDataUrl;
+      if (process.env.ACCESSPILOT_DEBUG === "1") {
+        console.debug("[twinly] answer", requests, {
+          type: result.action.type,
+          label: result.action.label,
+          requiresApproval: result.action.requiresApproval,
+          latencyMs: result.latencyMs,
+          usage: result.usage,
+        });
+      }
 
       const proposed = result.action;
       if (proposed.type === "done") {
@@ -159,7 +205,10 @@ export function createTwinlyActions(
       }
 
       const id = `twinly_${requests}`;
-      const action = toBrowserAction(proposed, id);
+      const action = toBrowserAction(proposed, id, pageContext, {
+        width: screenshot.width,
+        height: screenshot.height,
+      });
       if (!action)
         return { kind: "fail", message: "I couldn't use Twinly's answer. Please try again." };
       proposedById.set(id, proposed);
