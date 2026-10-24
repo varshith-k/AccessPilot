@@ -37,7 +37,9 @@ export async function captureScreenshot(
     ...(format === "jpeg" ? { quality } : {}),
     fullPage: false,
     scale: "css",
-    caret: "hide",
+    // Hiding the caret means restyling the page on every capture, which makes a visible window
+    // flicker several times per step. A caret in the screenshot is harmless.
+    caret: "initial",
     timeout,
     mask: [page.locator(SENSITIVE_FIELD_SELECTOR)],
     maskColor: "#000000",
