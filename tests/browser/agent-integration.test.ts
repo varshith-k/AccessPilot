@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AddressInfo } from "node:net";
 import { createDemoServer } from "../../demo-site/scholarship-server.mjs";
-import { startDemoSite } from "../../demo-site/server";
+import { startDemoSite } from "../../demo-site/browser-demo-server";
 import { createRealBrowserFactory } from "../../lib/agent/browserDriver";
 import { SCHOLARSHIP_STEPS, createFakeDeps, createLabelDrivenActions } from "../../lib/agent/fakes";
 import { runTask } from "../../lib/agent/orchestrator";
@@ -19,7 +19,7 @@ beforeEach(async () => {
   site = await startDemoSite();
 });
 afterEach(async () => {
-  await site.close();
+  await site?.close();
 });
 
 function run(path: string, steps = SCHOLARSHIP_STEPS) {
