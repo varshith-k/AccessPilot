@@ -88,6 +88,9 @@ How the orchestrator works with her controller's rules:
   `observationId` of the view it was planned from, and moves to the newest one after every action.
 - The first `execute` call for a consequential action carries no approval. The controller answers with its
   own approval id; the user's approval is then applied to that id, so the user is asked once.
+- **Stop** reaches the controller at once: when a task is stopped, the orchestrator calls the driver's
+  `stop()` (the controller's `stop()`), which interrupts a page that is still loading and any action in
+  flight. A Stop that arrives while Chromium is still starting closes it as soon as it is up.
 - `user_input_required` results (private or manual controls) become `user_input.required` and wait for
   Resume. Elements the page marks `sensitive`, or `type=password`, are handed over before any click.
 
