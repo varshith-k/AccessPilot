@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "generate:screenshots": "node scripts/generate-mock-screenshots.mjs"
   },
   "dependencies": {
     "next": "16.4.3",

@@ -18,7 +18,7 @@ const config = [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },
       ],
-      "no-console": ["error", { allow: ["warn", "error"] }],
+      "no-console": ["error", { allow: ["warn", "error", "debug"] }],
     },
   },
   prettier,

@@ -85,9 +85,10 @@ data: {"type":"narration","taskId":"task_1","seq":7,"at":"2026-10-25T14:00:03.12
 ```
 
 - Put the whole event in a single `data:` line as compact JSON.
-- Set `id:` to the event's `seq`. On reconnect, the browser sends `Last-Event-ID`. The server
-  should replay every event with `seq` greater than that value, or replay everything; the client
-  drops duplicates either way.
+- Set `id:` to the event's `seq`. On reconnect the client sends the last `seq` it received as a
+  `?lastEventId=<seq>` query parameter. A new `EventSource` can't set the `Last-Event-ID` header,
+  so please accept both. The server should replay every event with `seq` greater than that value,
+  or replay everything; the client drops duplicates either way.
 - Don't set an `event:` field. The client listens to the default `message` event only.
 - Comment lines (`: keep-alive`) are fine for heartbeats and are ignored. Send one at least
   every 15 seconds so proxies don't close an idle stream.
@@ -96,8 +97,13 @@ data: {"type":"narration","taskId":"task_1","seq":7,"at":"2026-10-25T14:00:03.12
 - Subscribing to a task that has already ended should replay its events, including the terminal
   one, and then close.
 
-Reconnects: if the connection drops before a terminal event, the client reconnects with
-exponential backoff and gives up after 5 attempts, then tells the user.
+Reconnects: if the connection drops before a terminal event, the client closes it and opens a
+new one after 0.5 s, 1 s, 2 s, 4 s and then 8 s. It gives up after 5 failed attempts in a row
+and tells the user. Receiving any valid event resets the count.
+
+Events can arrive before the matching HTTP response. For example, `task.stopped` may arrive
+before `POST /stop` returns `204`, and the next `step.started` may arrive before `POST /approve`
+does. The client handles either order.
 
 ## Event reference
 
@@ -228,3 +234,4 @@ Changes the frontend made to the original spec, with reasons:
 | 2026-10-24 | `goal` limited to 1000 characters. `deny.reason` limited to 500.                                                  | Bounds what reaches the model prompt.                                                                                                      |
 | 2026-10-24 | Text fields must be non-empty after trimming. `screenshot.step` may be 0. `imageDataUrl` must have a base64 body. | Empty narration or alt text is useless to a screen reader user. Step 0 covers the initial page screenshot.                                 |
 | 2026-10-24 | Unknown fields are stripped, not rejected.                                                                        | Lets the backend add fields without coordinating a frontend release.                                                                       |
+| 2026-10-24 | Reconnects send `?lastEventId=<seq>` on the events URL.                                                           | The client controls its own backoff, so it opens a new `EventSource`, and a new one can't send the `Last-Event-ID` header.                 |
