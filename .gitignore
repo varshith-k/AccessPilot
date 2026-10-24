@@ -17,3 +17,16 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+
+# AI coding assistant files (local only)
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
+.claude/
+.cursor/
+.cursorrules
+.codex/
+.windsurfrules
+.aider*
+accesspilot-frontend-prompt.md
