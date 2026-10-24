@@ -19,6 +19,7 @@ export default defineConfig({
       "lib/agent/**/*.test.ts",
       "app/api/**/*.test.ts",
       "demo-site/**/*.test.ts",
+      "lib/ai/**/*.test.ts",
     ],
     restoreMocks: true,
     coverage: {
