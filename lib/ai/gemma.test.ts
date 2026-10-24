@@ -202,6 +202,14 @@ describe("narrate / explainPage", () => {
     );
   });
 
+  it("tells the model to ask questions only when approval or info is needed", async () => {
+    const f = ok();
+    await narrate({ kind: "action_done", detail: "Clicked Next" }, opts(f));
+    const system = JSON.parse((f.mock.calls[0]?.[1] as RequestInit).body as string)
+      .systemInstruction.parts[0].text as string;
+    expect(system).toMatch(/ONLY when the event kind is needs_approval or needs_info/);
+  });
+
   it("fences untrusted page text in the prompt", async () => {
     const f = ok();
     await narrate(

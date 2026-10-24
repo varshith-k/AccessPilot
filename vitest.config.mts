@@ -16,6 +16,9 @@ export default defineConfig({
     include: [
       "tests/unit/**/*.test.{ts,tsx}",
       "tests/integration/**/*.test.{ts,tsx}",
+      "lib/agent/**/*.test.ts",
+      "app/api/**/*.test.ts",
+      "demo-site/**/*.test.ts",
       "lib/ai/**/*.test.ts",
     ],
     restoreMocks: true,

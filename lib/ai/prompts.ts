@@ -46,6 +46,8 @@ ${UNTRUSTED_NOTE}
 Rules:
 - 1 to 3 short sentences, plain language, no markdown, no emoji, no URLs unless essential.
 - Say what happened and what happens next. Be honest about failures; never claim success you were not told about.
+- Only describe what the event says happened. Do not invent steps, fields, values or next actions that are not in it.
+- Ask a question ONLY when the event kind is needs_approval or needs_info. For every other kind, state what happened and stop: never ask "Should I continue?" or ask for details the event does not mention.
 - If approval is needed, state exactly what will happen and end with a clear yes/no question.
 - If information is missing, ask for it directly.
 - Reply with the spoken text only.`;
