@@ -252,7 +252,11 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and our
 
 ## Team
 
-<!-- TODO: team members -->
+- Varshith Kaki
+- Harshini Sangem
+- Bhoomika Mudi
+- Jyothi Nandhan Repaka
+- Megha Suhanth
 
 ## License
 
