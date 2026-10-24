@@ -6,6 +6,7 @@ const metadata = {
   label: z.string().optional(),
   reason: z.string().optional(),
   commits: z.boolean(),
+  observationId: z.string().min(1).optional(),
 };
 
 /** Internal contract: coordinates are viewport CSS pixels, never Twinly's raw units. */
@@ -58,12 +59,14 @@ export interface BrowserPageContext {
 
 export type ActionResult = {
   actionId: string;
+  observationId?: string;
   pageContext?: BrowserPageContext;
   screenshot?: BrowserScreenshot;
 } & (
   | { status: "executed"; verification: "unverified" | "passed" | "failed" }
   | { status: "approval_required"; approvalId: string }
   | { status: "cancelled" }
+  | { status: "user_input_required"; reason: "sensitive_value" | "other"; instructions: string }
   | { status: "failed"; error: { code: string; message: string } }
 );
 
@@ -71,6 +74,17 @@ export type ActionResult = {
 export interface ExecuteActionOptions {
   signal?: AbortSignal;
   approval?: { approvalId: string; actionId: string };
+  expected?:
+    | { type: "url"; url: string }
+    | { type: "visible"; selector: string; text?: string }
+    | { type: "field"; selector: string; value: string };
+  verificationTimeoutMs?: number;
+}
+
+export interface BrowserObservation {
+  observationId: string;
+  screenshot: BrowserScreenshot;
+  pageContext: BrowserPageContext;
 }
 
 export type ExecuteBrowserAction = (

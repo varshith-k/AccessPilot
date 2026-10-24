@@ -18,6 +18,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:browser": "vitest run --config vitest.browser.config.mts",
+    "demo:browser": "tsc --project tsconfig.browser-demo.json && node .cache/browser-demo/scripts/browser-demo.js",
     "generate:screenshots": "node scripts/generate-mock-screenshots.mjs"
   },
   "dependencies": {

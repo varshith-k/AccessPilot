@@ -18,6 +18,7 @@ export interface BrowserSessionOptions {
 /** One isolated, in-memory session. Reuse it for a task, then always close it. */
 export class BrowserSession {
   private closePromise?: Promise<void>;
+  private actionPolicy = { enabled: false, approved: false, blocked: false, stopped: false };
 
   private constructor(
     private readonly browser: Browser,
@@ -58,10 +59,24 @@ export class BrowserSession {
       context.setDefaultTimeout(options.actionTimeoutMs ?? 10_000);
       context.setDefaultNavigationTimeout(options.navigationTimeoutMs ?? 30_000);
       const primaryPage = await context.newPage();
+      const actionPolicy = { enabled: false, approved: false, blocked: false, stopped: false };
       const redirects = new Map<string, string>();
       await context.route("**/*", async (route) => {
         try {
           const request = route.request();
+          if (actionPolicy.stopped) {
+            await route.abort("blockedbyclient");
+            return;
+          }
+          if (
+            actionPolicy.enabled &&
+            !actionPolicy.approved &&
+            !["GET", "HEAD", "OPTIONS"].includes(request.method())
+          ) {
+            actionPolicy.blocked = true;
+            await route.abort("blockedbyclient");
+            return;
+          }
           // Reject popup requests before they reach the network.
           if (
             !policy.allows(request.url()) ||
@@ -78,6 +93,14 @@ export class BrowserSession {
           try {
             const location = response.headers()["location"];
             if ([301, 302, 303, 307, 308].includes(response.status()) && location) {
+              if (
+                [307, 308].includes(response.status()) &&
+                !["GET", "HEAD"].includes(request.method())
+              ) {
+                actionPolicy.blocked = true;
+                await route.abort("blockedbyclient");
+                return;
+              }
               if (request.isNavigationRequest() && request.frame() === primaryPage?.mainFrame()) {
                 redirects.set(request.url(), new URL(location, request.url()).href);
                 // Finish this navigation without a redirect or Chromium error page.
@@ -113,7 +136,9 @@ export class BrowserSession {
       context.on("page", (opened) => {
         if (opened !== page) void opened.close().catch(() => {});
       });
-      return new BrowserSession(browser, context, page, policy, redirects);
+      const session = new BrowserSession(browser, context, page, policy, redirects);
+      session.actionPolicy = actionPolicy;
+      return session;
     } catch (error) {
       try {
         await context?.close();
@@ -169,8 +194,33 @@ export class BrowserSession {
     throw new Error("The website exceeded the limit of 10 redirects.");
   }
 
+  /** Trusted controller hooks; never expose these to model-generated code. */
+  setActionPermission(approved: boolean): void {
+    this.actionPolicy.enabled = true;
+    this.actionPolicy.approved = approved;
+    this.actionPolicy.blocked = false;
+  }
+
+  get blockedMutation(): boolean {
+    return this.actionPolicy.blocked;
+  }
+
+  assertUrlAllowed(url: string): string {
+    return this.policy.assertAllowed(url);
+  }
+
+  async followPendingRedirect(): Promise<void> {
+    const url = new URL(this.page.url());
+    url.hash = "";
+    const redirect = this.redirects.get(url.href);
+    this.redirects.clear();
+    if (redirect) await this.navigate(redirect);
+  }
+
   /** Repeated/concurrent calls share cleanup and do not launch another browser. */
   close(): Promise<void> {
+    this.actionPolicy.stopped = true;
+    this.actionPolicy.approved = false;
     this.closePromise ??= this.dispose();
     return this.closePromise;
   }
