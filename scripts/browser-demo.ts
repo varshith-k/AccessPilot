@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { startDemoSite } from "../demo-site/server";
+import { startDemoSite } from "../demo-site/browser-demo-server";
 import { createBrowserController, type BrowserController } from "../lib/browser/executor";
 import type { BrowserAction, ActionResult, ExecuteActionOptions } from "../lib/contracts/browser";
 
