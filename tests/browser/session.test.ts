@@ -24,7 +24,7 @@ describe("real Chromium sessions", () => {
   });
 
   it("loads a local page, retains state and closes idempotently", async () => {
-    const session = await createBrowserSession();
+    const session = await createBrowserSession({ allowedOrigins: [url] });
     const page = session.page;
     try {
       await page.goto(url);
@@ -46,10 +46,13 @@ describe("real Chromium sessions", () => {
   });
 
   it("isolates task storage and supports a custom viewport", async () => {
-    const first = await createBrowserSession();
+    const first = await createBrowserSession({ allowedOrigins: [url] });
     let second: Awaited<ReturnType<typeof createBrowserSession>> | undefined;
     try {
-      second = await createBrowserSession({ viewport: { width: 800, height: 600 } });
+      second = await createBrowserSession({
+        allowedOrigins: [url],
+        viewport: { width: 800, height: 600 },
+      });
       await first.page.goto(url);
       await first.page.evaluate(() => localStorage.setItem("task", "private"));
       await second.page.goto(url);
@@ -64,7 +67,7 @@ describe("real Chromium sessions", () => {
   });
 
   it("reports externally closed pages", async () => {
-    const session = await createBrowserSession();
+    const session = await createBrowserSession({ allowedOrigins: [url] });
     try {
       await session.page.close();
       expect(session.isClosed).toBe(true);
@@ -76,8 +79,8 @@ describe("real Chromium sessions", () => {
 
   it("rejects unbounded timeouts and invalid dimensions before launching", async () => {
     await expect(createBrowserSession({ actionTimeoutMs: 0 })).rejects.toThrow(RangeError);
-    await expect(createBrowserSession({ viewport: { width: -1, height: 720 } })).rejects.toThrow(
-      RangeError,
-    );
+    await expect(
+      createBrowserSession({ allowedOrigins: [url], viewport: { width: -1, height: 720 } }),
+    ).rejects.toThrow(RangeError);
   });
 });
