@@ -21,6 +21,7 @@ describe("resolveTaskClientConfig", () => {
     ).toEqual({
       mode: "mock",
       scenario: "scholarship-happy",
+      mockSpeed: 1,
     });
   });
 
@@ -39,13 +40,13 @@ describe("resolveTaskClientConfig", () => {
   it("lets ?mock= pick a scenario outside production, even over http mode", () => {
     expect(
       resolveTaskClientConfig({ envMode: "http", search: "?mock=failure", nodeEnv: "development" }),
-    ).toEqual({ mode: "mock", scenario: "failure" });
+    ).toEqual({ mode: "mock", scenario: "failure", mockSpeed: 1 });
   });
 
   it("ignores ?mock= in production and for unknown scenarios", () => {
     expect(
       resolveTaskClientConfig({ envMode: "http", search: "?mock=failure", nodeEnv: "production" }),
-    ).toEqual({ mode: "http", scenario: "scholarship-happy" });
+    ).toEqual({ mode: "http", scenario: "scholarship-happy", mockSpeed: 1 });
     expect(
       resolveTaskClientConfig({ envMode: undefined, search: "?mock=nope", nodeEnv: "test" })
         .scenario,
@@ -53,10 +54,29 @@ describe("resolveTaskClientConfig", () => {
   });
 });
 
+describe("mockSpeed", () => {
+  const resolve = (search: string, nodeEnv = "development") =>
+    resolveTaskClientConfig({ envMode: undefined, search, nodeEnv }).mockSpeed;
+
+  it("reads ?mockSpeed= outside production", () => {
+    expect(resolve("?mockSpeed=0.05")).toBe(0.05);
+    expect(resolve("?mock=failure&mockSpeed=0")).toBe(0);
+  });
+
+  it("ignores invalid values and production", () => {
+    expect(resolve("?mockSpeed=fast")).toBe(1);
+    expect(resolve("?mockSpeed=-1")).toBe(1);
+    expect(resolve("?mockSpeed=50")).toBe(1);
+    expect(resolve("?mockSpeed=0.1", "production")).toBe(1);
+  });
+});
+
 describe("createTaskClient", () => {
   it("builds the matching client", () => {
-    expect(createTaskClient({ mode: "http", scenario: "failure" })).toBeInstanceOf(HttpTaskClient);
-    const mock = createTaskClient({ mode: "mock", scenario: "failure" });
+    expect(createTaskClient({ mode: "http", scenario: "failure", mockSpeed: 1 })).toBeInstanceOf(
+      HttpTaskClient,
+    );
+    const mock = createTaskClient({ mode: "mock", scenario: "failure", mockSpeed: 1 });
     expect(mock).toBeInstanceOf(MockTaskClient);
     expect((mock as MockTaskClient).scenarioName).toBe("failure");
   });
