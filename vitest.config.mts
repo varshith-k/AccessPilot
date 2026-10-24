@@ -25,7 +25,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "text", "html"],
-      include: ["lib/client/**", "lib/contracts/**", "hooks/**", "components/**"],
+      include: ["lib/client/**", "lib/contracts/**", "lib/twinly/**", "hooks/**", "components/**"],
       thresholds: {
         lines: 85,
       },
