@@ -180,7 +180,7 @@ describe("stop", () => {
       {
         execute: vi.fn(
           (a) =>
-            new Promise((resolve) => {
+            new Promise<ActionResult>((resolve) => {
               finishAction = () =>
                 resolve({
                   actionId: a.id,
