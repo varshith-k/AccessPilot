@@ -7,3 +7,13 @@ __pycache__/
 dist/
 build/
 .venv/
+
+# Next.js / testing
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+blob-report/
