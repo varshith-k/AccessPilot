@@ -178,3 +178,30 @@ describe("useSpeechRecognition", () => {
     expect(onFinal).toHaveBeenCalledWith("hello");
   });
 });
+
+describe("result ordering", () => {
+  beforeEach(() => {
+    installSpeechRecognition();
+  });
+
+  it("delivers the transcript before reporting that listening ended", () => {
+    const order: string[] = [];
+    const { result } = renderRecognition({
+      onFinal: (text) => order.push(`final:${text}`),
+      onNothingHeard: () => order.push("nothing"),
+      onListeningChange: (listening) => order.push(`listening:${listening}`),
+    });
+    act(() => result.current.start());
+    act(() => FakeRecognition.latest.say("repeat"));
+    act(() => result.current.start());
+    act(() => FakeRecognition.latest.end());
+    expect(order).toEqual([
+      "listening:true",
+      "final:repeat",
+      "listening:false",
+      "listening:true",
+      "nothing",
+      "listening:false",
+    ]);
+  });
+});

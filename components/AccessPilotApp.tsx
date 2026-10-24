@@ -87,6 +87,13 @@ export function AccessPilotApp({ client }: AccessPilotAppProps) {
   );
 }
 
+/** A dictated website address ("example.org/apply", "https://…"), normalized to https. */
+function asWebAddress(text: string): string | null {
+  const candidate = text.trim().replace(/[.,!?]$/, "");
+  if (!/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(candidate)) return null;
+  return /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
+}
+
 interface TaskWorkspaceProps {
   client?: TaskClient | undefined;
   onShowHelp(): void;
@@ -165,6 +172,18 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
     [announce, speak],
   );
 
+  /**
+   * A direct answer to something the user just asked: never swallowed by the duplicate filter,
+   * and spoken ahead of narration that queued up while the microphone was on.
+   */
+  const reply = useCallback(
+    (text: string, priority: NarrationPriority) => {
+      announce(text, priority, { force: true });
+      speak(text, priority, { front: true });
+    },
+    [announce, speak],
+  );
+
   const sayPolite = useCallback((text: string) => say(text, "polite"), [say]);
   const working = state.status === "planning" || state.status === "running";
   const stillWorking = useStillWorking(working, state.lastSeq, sayPolite);
@@ -177,7 +196,7 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
     switch (command.kind) {
       case "stop":
         if (active) void session.stop();
-        else say("Nothing is running.", "polite");
+        else reply("Nothing is running.", "polite");
         return;
       case "approve":
         void session.approve();
@@ -186,7 +205,7 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
         void session.deny("Declined by voice");
         return;
       case "unclear_approval":
-        say(
+        reply(
           `I heard “${text}”, which isn't a clear yes or no, so nothing was submitted. Say “approve” to submit, or “don't submit”.`,
           "assertive",
         );
@@ -196,17 +215,17 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
         return;
       case "describe_page":
         if (!session.describePage()) {
-          say("I haven't looked at a page yet. Start a task first.", "polite");
+          reply("I haven't looked at a page yet. Start a task first.", "polite");
         }
         return;
       case "continue":
         void session.resume();
         return;
       case "no_approval_pending":
-        say("There's nothing waiting for your approval right now.", "polite");
+        reply("There's nothing waiting for your approval right now.", "polite");
         return;
       case "nothing_to_continue":
-        say("AccessPilot isn't waiting for you right now.", "polite");
+        reply("AccessPilot isn't waiting for you right now.", "polite");
         return;
       case "start_task":
         startFromVoice();
@@ -214,31 +233,37 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
       case "clear_goal":
         if (active) break;
         setGoal("");
-        say("Cleared the goal box.", "polite");
+        reply("Cleared the goal box.", "polite");
         return;
       case "none":
         break;
     }
     if (state.status === "awaiting_user") {
       setHideHeard(true);
-      say(
+      reply(
         "AccessPilot is waiting for you. Finish the step in the browser window, then say “continue”, or say “stop”.",
         "polite",
       );
       return;
     }
     if (active) {
-      say(
+      reply(
         "AccessPilot is working on a task. Say “stop” to stop it, or wait for it to finish.",
         "polite",
       );
       return;
     }
     if (command.kind !== "none") return;
+    const spokenUrl = asWebAddress(command.text);
+    if (spokenUrl !== null) {
+      setUrl(spokenUrl);
+      reply(`Put ${spokenUrl} in the website address box.`, "polite");
+      return;
+    }
     const added = goal.trim() !== "";
     const next = added ? `${goal.trim()} ${command.text}` : command.text;
     setGoal(next);
-    say(
+    reply(
       added
         ? `Added to the goal: ${command.text}. Say “start task” or press Start task when it's ready, or say “clear the goal” to start over.`
         : `Heard: ${command.text}. It's in the goal box. Edit it if you need to, then say “start task” or press Start task.`,
@@ -248,12 +273,12 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
 
   const startFromVoice = () => {
     if (active) {
-      say("A task is already running. Say “stop” first if you want to start over.", "polite");
+      reply("A task is already running. Say “stop” first if you want to start over.", "polite");
       return;
     }
     const parsed = startTaskRequestSchema.safeParse({ url, goal });
     if (!parsed.success) {
-      say(
+      reply(
         `I can't start yet. ${parsed.error.issues.map((issue) => issue.message).join(" ")}`,
         "assertive",
       );
@@ -273,10 +298,15 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
         announce("Listening…", "polite");
       }
     },
-    onNothingHeard: () => say("I didn't hear anything. Try again, or type instead.", "polite"),
-    onError: (error) => say(error.message, "assertive"),
+    onNothingHeard: () => reply("I didn't hear anything. Try again, or type instead.", "polite"),
+    onError: (error) => reply(error.message, "assertive"),
   });
   const { abort: abortListening } = recognition;
+
+  // The microphone was for answering the question; once it is gone, stop listening.
+  useEffect(() => {
+    if (!approvalOpen) abortListening();
+  }, [approvalOpen, abortListening]);
 
   const toggleMic = () => {
     if (!recognition.supported) {
@@ -288,18 +318,18 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
   };
 
   const repeat = () => {
-    if (!session.repeatLast()) say("There's nothing to repeat yet.", "polite");
+    if (!session.repeatLast()) reply("There's nothing to repeat yet.", "polite");
   };
 
   const { stop: stopSession } = session;
   const stop = useCallback(() => {
     abortListening();
     if (!active) {
-      say("Nothing is running.", "polite");
+      reply("Nothing is running.", "polite");
       return;
     }
     void stopSession();
-  }, [abortListening, active, say, stopSession]);
+  }, [abortListening, active, reply, stopSession]);
 
   useKeyboardShortcuts([
     { code: "KeyS", alt: true, shift: true, allowInTextFields: true, handler: stop },
@@ -337,6 +367,8 @@ function TaskWorkspace({ client: injected, onShowHelp, onCloseHelp }: TaskWorksp
       );
     }
     void session.start(input);
+    // Same place as when the Start button disables itself, whichever way the task was started.
+    statusRef.current?.focus();
   };
 
   const sendFollowUp = (text: string) => {

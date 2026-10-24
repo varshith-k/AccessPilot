@@ -23,6 +23,9 @@ function isPlausibleHostname(hostname: string): boolean {
  */
 export function isAllowedTaskUrl(value: string): boolean {
   if (HIDDEN_OR_SPACE.test(value)) return false;
+  // Browsers decode percent-escapes in the host (`example.org%2Eevil.com` opens
+  // example.org.evil.com), so the address shown would differ from the one opened.
+  if (/^[a-z][a-z0-9+.-]*:\/\/[^/?#]*%/i.test(value)) return false;
   let url: URL;
   try {
     url = new URL(value);

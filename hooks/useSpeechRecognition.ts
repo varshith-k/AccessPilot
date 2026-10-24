@@ -179,15 +179,18 @@ export function useSpeechRecognition(options: SpeechRecognitionOptions): SpeechR
       if (recognitionRef.current !== recognition) return;
       recognitionRef.current = null;
       setInterim("");
-      setListeningState(false);
       const heard = finalText.trim();
-      if (discard) return;
-      if (heard === "") {
-        optionsRef.current.onNothingHeard?.();
-        return;
+      // Report the result before announcing that listening ended: the reply is then queued
+      // ahead of narration that was held while the microphone was on.
+      if (!discard) {
+        if (heard === "") {
+          optionsRef.current.onNothingHeard?.();
+        } else {
+          setTranscript(heard);
+          optionsRef.current.onFinal(heard);
+        }
       }
-      setTranscript(heard);
-      optionsRef.current.onFinal(heard);
+      setListeningState(false);
     };
 
     recognitionRef.current = recognition;

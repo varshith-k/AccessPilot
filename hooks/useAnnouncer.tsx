@@ -12,8 +12,13 @@ import {
 } from "react";
 import type { NarrationPriority } from "@/lib/contracts";
 
+export interface AnnounceOptions {
+  /** Announce even if the same text was just announced, e.g. when the user asked to repeat. */
+  force?: boolean;
+}
+
 export interface Announcer {
-  announce(text: string, priority?: NarrationPriority): void;
+  announce(text: string, priority?: NarrationPriority, options?: AnnounceOptions): void;
 }
 
 interface LiveMessages {
@@ -91,9 +96,10 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const announce = useCallback(
-    (raw: string, priority: NarrationPriority = "polite") => {
+    (raw: string, priority: NarrationPriority = "polite", options?: AnnounceOptions) => {
       const text = raw.trim();
-      if (text === "" || isDuplicate(text, priority)) return;
+      if (text === "") return;
+      if (isDuplicate(text, priority) && !options?.force) return;
       if (priority === "assertive") {
         // Assertive news makes pending polite chatter stale.
         pendingPolite.current = [];

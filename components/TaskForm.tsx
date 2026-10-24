@@ -79,8 +79,11 @@ export function TaskForm({
 
   const describedBy = (...parts: (string | false)[]) => parts.filter(Boolean).join(" ");
 
+  // POST keeps the typed goal out of the URL and history if the form is submitted before the
+  // page's scripts load; afterwards onSubmit handles everything.
   return (
     <form
+      method="post"
       noValidate
       onSubmit={handleSubmit}
       className="space-y-4"

@@ -573,9 +573,11 @@ describe("useTaskSession with a stub client", () => {
     send({ type: "narration", text: "Typing.", priority: "polite" });
     effects.speak.mockClear();
     expect(result.current.repeatLast()).toBe(true);
-    expect(effects.speak).toHaveBeenLastCalledWith("Typing.", "polite");
+    // Replies go ahead of queued narration and are never swallowed as duplicates.
+    expect(effects.speak).toHaveBeenLastCalledWith("Typing.", "polite", { front: true });
+    expect(effects.announce).toHaveBeenLastCalledWith("Typing.", "polite", { force: true });
     expect(result.current.describePage()).toBe(true);
-    expect(effects.speak).toHaveBeenLastCalledWith("Form. Has fields.", "polite");
+    expect(effects.speak).toHaveBeenLastCalledWith("Form. Has fields.", "polite", { front: true });
   });
 
   it("reset returns to idle after a task ends, and retry only works after a failure", async () => {

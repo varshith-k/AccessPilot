@@ -29,10 +29,13 @@ import type { TaskClient } from "@/lib/client/types";
 
 /** Side effects the session triggers. Defaults are no-ops so the hook works on its own. */
 export interface SessionEffects {
-  announce(text: string, priority: NarrationPriority): void;
-  speak(text: string, priority: NarrationPriority): void;
+  announce(text: string, priority: NarrationPriority, options?: { force?: boolean }): void;
+  speak(text: string, priority: NarrationPriority, options?: { front?: boolean }): void;
   cancelSpeech(): void;
 }
+
+/** A direct answer to the user: never de-duplicated away, and spoken before queued narration. */
+const REPLY = { force: true, front: true } as const;
 
 export interface UseTaskSessionOptions {
   client: TaskClient;
@@ -142,10 +145,23 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
     return result;
   }, []);
 
-  const tell = useCallback((text: string, priority: NarrationPriority, speak: boolean) => {
-    effectsRef.current.announce(text, priority);
-    if (speak) effectsRef.current.speak(text, priority);
-  }, []);
+  const tell = useCallback(
+    (
+      text: string,
+      priority: NarrationPriority,
+      speak: boolean,
+      options?: { force?: boolean; front?: boolean },
+    ) => {
+      if (options) {
+        effectsRef.current.announce(text, priority, { force: options.force ?? false });
+        if (speak) effectsRef.current.speak(text, priority, { front: options.front ?? false });
+        return;
+      }
+      effectsRef.current.announce(text, priority);
+      if (speak) effectsRef.current.speak(text, priority);
+    },
+    [],
+  );
 
   const handleEvent = useCallback(
     (event: TaskEvent) => {
@@ -161,7 +177,9 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
   const handleStreamError = useCallback(
     (error: Error) => {
       if (isTaskClientError(error) && !error.fatal) {
-        dispatch({ type: "ui/warning", message: error.message });
+        const result = dispatch({ type: "ui/warning", message: error.message });
+        // Announce a warning the first time; repeats only update its count on screen.
+        if (result.state.warnings.at(-1)?.count === 1) tell(error.message, "polite", false);
         return;
       }
       const message = userMessageFor(error, "Lost the connection to AccessPilot.");
@@ -319,7 +337,19 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
           message: goal.error.issues[0]?.message ?? "That message can't be used as a goal.",
         };
       }
-      const url = request?.url ?? taskUrlSchema.safeParse(fallbackUrl ?? "").data;
+      let url = request?.url;
+      if (url === undefined && fallbackUrl !== undefined && fallbackUrl.trim() !== "") {
+        const parsed = taskUrlSchema.safeParse(fallbackUrl);
+        if (!parsed.success) {
+          return {
+            ok: false,
+            reason: "invalid",
+            message:
+              `The website address in the task form isn't valid. ${parsed.error.issues[0]?.message ?? ""}`.trim(),
+          };
+        }
+        url = parsed.data;
+      }
       if (url === undefined) return { ok: false, reason: "no_url" };
       void start({ url, goal: goal.data });
       return { ok: true };
@@ -337,14 +367,14 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
   const repeatLast = useCallback(() => {
     const text = mostImportantMessage(stateRef.current);
     if (text === null) return false;
-    tell(text, "polite", true);
+    tell(text, "polite", true, REPLY);
     return true;
   }, [tell]);
 
   const describePage = useCallback(() => {
     const map = stateRef.current.pageMap;
     if (map === null) return false;
-    tell(`${map.title}. ${map.summary}`, "polite", true);
+    tell(`${map.title}. ${map.summary}`, "polite", true, REPLY);
     return true;
   }, [tell]);
 

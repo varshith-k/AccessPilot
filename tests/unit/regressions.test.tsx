@@ -415,4 +415,118 @@ describe("app flows", () => {
     act(() => FakeRecognition.latest.say("approve"));
     await until(() => liveText("assertive") === "Submitted. Confirmation number 4821.");
   });
+
+  describe("round 2", () => {
+    it("repeat pressed twice quickly re-announces for screen reader users", async () => {
+      settingsStore.update({ screenReaderMode: true });
+      const user = renderApp();
+      await fill(user);
+      await user.click(screen.getByRole("button", { name: "Start task" }));
+      await until(() => screen.queryByRole("dialog") !== null);
+      const region = () => screen.getByTestId("live-polite-local").textContent ?? "";
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        code: "KeyR",
+        altKey: true,
+        shiftKey: true,
+      });
+      await advance(500);
+      const first = region();
+      fireEvent.keyDown(document.activeElement ?? document.body, {
+        code: "KeyR",
+        altKey: true,
+        shiftKey: true,
+      });
+      await advance(500);
+      expect(first).toMatch(/^Approval needed\./);
+      expect(region()).not.toBe(first);
+      expect(region().replace(/\u200b/g, "")).toBe(first.replace(/\u200b/g, ""));
+    });
+
+    it("forms use POST so text never lands in the URL if submitted before the page loads", () => {
+      renderApp();
+      for (const form of document.querySelectorAll("form")) {
+        expect(form.getAttribute("method")).toBe("post");
+      }
+    });
+
+    it("Enter in the goal box starts the task and moves focus to Status", async () => {
+      const user = renderApp();
+      await fill(user);
+      await user.keyboard("{Enter}");
+      expect(screen.getByRole("heading", { name: "Status" })).toHaveFocus();
+    });
+
+    it("a chat message explains an invalid form address instead of asking for one", async () => {
+      const user = renderApp();
+      await user.type(
+        screen.getByRole("textbox", { name: "Website address" }),
+        "https://exa mple.org",
+      );
+      await user.type(screen.getByRole("textbox", { name: "Message AccessPilot" }), "Apply");
+      await user.click(screen.getByRole("button", { name: "Send" }));
+      expect(
+        screen.getByText(/^The website address in the task form isn't valid\./, { selector: "p" }),
+      ).toBeVisible();
+    });
+
+    it("Escape on the approval dialog also turns the microphone off", async () => {
+      const user = renderApp();
+      await fill(user);
+      await user.click(screen.getByRole("button", { name: "Start task" }));
+      await until(() => screen.queryByRole("dialog") !== null);
+      await user.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Answer by voice" }),
+      );
+      const engine = FakeRecognition.latest;
+      await user.keyboard("{Escape}");
+      expect(engine.aborted).toBe(true);
+      expect(screen.getByRole("button", { name: /^Microphone/ })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    });
+
+    it("a spoken web address goes into the address box, not the goal", () => {
+      renderApp();
+      speak("example.org/scholarship.");
+      expect(screen.getByRole("textbox", { name: "Website address" })).toHaveValue(
+        "https://example.org/scholarship",
+      );
+      expect(screen.getByRole("textbox", { name: "What do you want to get done?" })).toHaveValue(
+        "",
+      );
+    });
+
+    it("a warning is announced once; repeats only update its count", async () => {
+      const events: ((error: Error) => void)[] = [];
+      const client: TaskClient = {
+        start: async () => ({ taskId: "w" }),
+        subscribe: (_id, _onEvent, onError) => {
+          events.push(onError);
+          return () => undefined;
+        },
+        approve: async () => undefined,
+        deny: async () => undefined,
+        resume: async () => undefined,
+        stop: async () => undefined,
+      };
+      const user = renderApp(client);
+      await fill(user);
+      await user.click(screen.getByRole("button", { name: "Start task" }));
+      await advance(250);
+      const { TaskClientError } = await import("@/lib/client/errors");
+      const warn = () =>
+        act(() =>
+          events.at(-1)?.(
+            new TaskClientError({ kind: "invalid_event", message: "Skipped an update." }),
+          ),
+        );
+      warn();
+      await advance(500);
+      expect(liveText("polite")).toMatch(/Skipped an update\./);
+      warn();
+      warn();
+      expect(screen.getByText(/\(3 times\)/)).toBeVisible();
+    });
+  });
 });

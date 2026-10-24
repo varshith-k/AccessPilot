@@ -146,7 +146,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
         </button>
       )}
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-2">
+      <form method="post" onSubmit={handleSubmit} noValidate className="space-y-2">
         <label htmlFor={inputId} className="block font-semibold">
           Message AccessPilot
         </label>

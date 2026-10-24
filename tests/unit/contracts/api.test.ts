@@ -42,6 +42,9 @@ describe("isAllowedTaskUrl", () => {
     "https://example",
     "https://-bad-.com",
     "https://bad..com",
+    // Round 2: percent-encoded hosts decode to a different site than the one shown.
+    "https://example.org%2Eevil.com",
+    "https://%65xample.org",
   ])("rejects %s", (url) => {
     expect(isAllowedTaskUrl(url)).toBe(false);
   });
@@ -69,6 +72,10 @@ describe("startTaskRequestSchema", () => {
   it("explains which URLs are allowed", () => {
     const result = startTaskRequestSchema.safeParse({ url: "http://example.edu", goal: "Apply" });
     expect(result.error?.issues[0]?.message).toMatch(/https:\/\/.*localhost/);
+  });
+
+  it("still allows percent-encoding in the path and query", () => {
+    expect(isAllowedTaskUrl("https://example.org/a%20b?q=%2F")).toBe(true);
   });
 
   it("rejects goals made only of invisible characters", () => {
