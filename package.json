@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:browser": "vitest run --config vitest.browser.config.mts",
-    "generate:screenshots": "node scripts/generate-mock-screenshots.mjs"
+    "generate:screenshots": "node scripts/generate-mock-screenshots.mjs",
+    "demo-site": "node demo-site/server.mjs"
   },
   "dependencies": {
     "next": "16.4.3",

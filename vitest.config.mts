@@ -13,9 +13,13 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
-    include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}",
+    include: [
+      "tests/unit/**/*.test.{ts,tsx}",
+      "tests/integration/**/*.test.{ts,tsx}",
       "lib/agent/**/*.test.ts",
-      "app/api/**/*.test.ts"],
+      "app/api/**/*.test.ts",
+      "demo-site/**/*.test.ts",
+    ],
     restoreMocks: true,
     coverage: {
       provider: "v8",
