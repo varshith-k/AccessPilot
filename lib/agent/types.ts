@@ -5,6 +5,7 @@ import type {
   ExecuteBrowserAction,
   NarrationPriority,
   TaskEvent,
+  UserInputReason,
 } from "@/lib/contracts";
 
 /**
@@ -66,7 +67,9 @@ export interface ActionHistoryItem {
 export type NextAction =
   | { kind: "action"; action: BrowserAction }
   | { kind: "done"; summary: string }
-  | { kind: "fail"; message: string };
+  | { kind: "fail"; message: string }
+  /** The page needs something only the user can give (a password, card number or code). */
+  | { kind: "handoff"; reason: UserInputReason; what: string };
 
 export interface ActionProvider {
   nextAction(input: {

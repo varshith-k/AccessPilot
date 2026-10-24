@@ -5,6 +5,8 @@ import { startDemoSite } from "../../demo-site/browser-demo-server";
 import { createRealBrowserFactory } from "../../lib/agent/browserDriver";
 import { SCHOLARSHIP_STEPS, createFakeDeps, createLabelDrivenActions } from "../../lib/agent/fakes";
 import { runTask } from "../../lib/agent/orchestrator";
+import { createTwinlyActions, type TwinlyLike } from "../../lib/agent/twinlyActions";
+import { normalizeTwinlyAction } from "../../lib/twinly/actions";
 import { TaskStore } from "../../lib/agent/taskStore";
 import { DEFAULT_LIMITS, type AgentDeps } from "../../lib/agent/types";
 import type { TaskEvent } from "../../lib/contracts";
@@ -167,5 +169,102 @@ describe("the scholarship form that needs scrolling and a settled page", () => {
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+});
+
+type TwinlyStep = { click: string; commits?: boolean } | { type: string };
+
+/**
+ * Answers the way the real Twinly API does: in its 0 to 1000 grid, from what it is sent. It finds
+ * each control from the element hints in the request, so the coordinates travel the real path:
+ * grid, then viewport pixels, then Chromium.
+ */
+function twinlyStandIn(
+  steps: TwinlyStep[],
+  seen: { viewport?: { width: number; height: number } } = {},
+): TwinlyLike {
+  let index = 0;
+  const reply = (
+    raw: Parameters<typeof normalizeTwinlyAction>[0],
+    viewport: { width: number; height: number },
+  ) => ({
+    action: normalizeTwinlyAction(raw, viewport),
+    model: "stand-in",
+    usage: null,
+    attempts: 1,
+    latencyMs: 1,
+  });
+  return {
+    async nextAction(input) {
+      seen.viewport = input.viewport;
+      const step = steps[index++];
+      if (!step)
+        return reply({ type: "done", text: "Done.", reason: "", commits: false }, input.viewport);
+      if ("type" in step)
+        return reply({ type: "type", text: step.type, reason: "", commits: false }, input.viewport);
+      const target = input.elements?.find((el) => el.label?.includes(step.click));
+      if (!target)
+        return reply({ type: "fail", reason: `no ${step.click}`, commits: false }, input.viewport);
+      return reply(
+        {
+          type: "click",
+          x: (target.x / input.viewport.width) * 1000,
+          y: (target.y / input.viewport.height) * 1000,
+          label: step.click,
+          reason: "",
+          commits: step.commits ?? false,
+        },
+        input.viewport,
+      );
+    },
+  };
+}
+
+describe("orchestrator + Twinly adapter + real Chromium", () => {
+  it("fills the form from Twinly's grid coordinates and still waits for approval before submitting", async () => {
+    const seen: { viewport?: { width: number; height: number } } = {};
+    const store = new TaskStore();
+    const url = `${site.origin}/scholarship`;
+    const task = store.create(url, "Apply");
+    const deps: AgentDeps = {
+      ...createFakeDeps({ stepDelayMs: 0 }),
+      createBrowser: createRealBrowserFactory(),
+      actions: createTwinlyActions(
+        twinlyStandIn(
+          [
+            { click: "Full name" },
+            { type: "Alex Morgan" },
+            { click: "Email" },
+            { type: "alex@example.com" },
+            { click: "Program" },
+            { type: "Computer Science" },
+            { click: "Submit application", commits: true },
+          ],
+          seen,
+        ),
+      ),
+    };
+    const finished = runTask(
+      deps,
+      task,
+      { url, goal: "Apply" },
+      { ...DEFAULT_LIMITS, narrationTimeoutMs: 300 },
+    );
+
+    await vi.waitFor(
+      () => {
+        if (!task.events.some((e) => e.type === "approval.required")) throw new Error("not yet");
+      },
+      { timeout: 25_000, interval: 100 },
+    );
+    expect(site.submissions).toBe(0);
+    expect(seen.viewport).toEqual({ width: 1280, height: 720 });
+    const approval = task.events.find((e) => e.type === "approval.required");
+    store.approve(task.id, approval && "approvalId" in approval ? approval.approvalId : "");
+    await finished;
+
+    expect(site.submissions).toBe(1);
+    expect(task.events.at(-1)?.type).toBe("task.completed");
+    expect(JSON.stringify(task.events)).not.toContain('Alex Morgan","alt');
   });
 });
