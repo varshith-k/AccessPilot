@@ -666,3 +666,21 @@ describe("working with the real browser controller's protocol", () => {
     expect(run.last()?.type).toBe("task.completed");
   });
 });
+
+describe("handing over when Twinly says a secret is needed", () => {
+  it("asks the user, waits for Continue, then carries on, and runs nothing in between", async () => {
+    const { deps, execute } = makeDeps([
+      { kind: "handoff", reason: "sensitive_value", what: "sensitive field" },
+      act(click("n", 1, 1, "Next")),
+      done(),
+    ]);
+    const run = start(deps);
+    await run.waitFor("user_input.required");
+    expect(run.find("user_input.required")).toMatchObject({ reason: "sensitive_value" });
+    expect(execute).not.toHaveBeenCalled();
+    run.store.resume(run.task.id);
+    await run.finished;
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(run.last()?.type).toBe("task.completed");
+  });
+});

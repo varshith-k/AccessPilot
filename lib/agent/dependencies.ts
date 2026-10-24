@@ -1,5 +1,7 @@
 import { mapPage, narrate, planTask } from "@/lib/ai";
+import { createTwinlyClientFromEnv, isTwinlyError } from "@/lib/twinly/client";
 import { AgentError } from "./errors";
+import { createTwinlyActions } from "./twinlyActions";
 import { createRealBrowserFactory } from "./browserDriver";
 import { SCHOLARSHIP_STEPS, createFakeDeps, createLabelDrivenActions } from "./fakes";
 import type { AgentDeps, Planner } from "./types";
@@ -13,6 +15,28 @@ function fakeDelay(): { stepDelayMs: number } | Record<string, never> {
   return raw && Number.isFinite(delay) && delay >= 0 ? { stepDelayMs: delay } : {};
 }
 
+function twinlyActions() {
+  if (process.env.ACCESSPILOT_BROWSER !== "real") {
+    throw new AgentError(
+      "internal_error",
+      "Twinly needs a real browser to look at. Ask the person running AccessPilot to turn the real browser on.",
+    );
+  }
+  try {
+    const budget = Number(process.env.ACCESSPILOT_TWINLY_MAX_REQUESTS);
+    return createTwinlyActions(
+      createTwinlyClientFromEnv(),
+      Number.isInteger(budget) && budget > 0 ? { maxRequests: budget } : {},
+    );
+  } catch (error) {
+    if (!isTwinlyError(error)) throw error;
+    throw new AgentError(
+      "internal_error",
+      "Twinly isn't set up on this server yet. Ask the person running it to add the Twinly key.",
+    );
+  }
+}
+
 /**
  * Builds the modules for one task.
  *
@@ -20,6 +44,8 @@ function fakeDelay(): { stepDelayMs: number } | Record<string, never> {
  * - `ACCESSPILOT_BROWSER=real` swaps the scripted browser for real Chromium (lib/browser). The scripted
  *   Twinly then finds the form controls by name on the live page. `ACCESSPILOT_BROWSER_HEADED=1`
  *   shows the window.
+ * - `ACCESSPILOT_ACTIONS=twinly` swaps the scripted Twinly stand-in for the real Twinly computer-use API
+ *   (needs `TWINLY_API_KEY` and `ACCESSPILOT_BROWSER=real`: Twinly reads real screenshots).
  * - `ACCESSPILOT_PLANNER=gemma` swaps in the real Gemma planner (lib/ai) for the fake one, so Gemma
  *   plans, describes pages and narrates while Twinly and the browser are still scripted.
  *
@@ -44,6 +70,7 @@ export function getAgentDeps(): AgentDeps {
       actions: createLabelDrivenActions(SCHOLARSHIP_STEPS, "Submitted. Confirmation number 4821."),
     };
   }
+  if (process.env.ACCESSPILOT_ACTIONS === "twinly") deps = { ...deps, actions: twinlyActions() };
   if (process.env.ACCESSPILOT_PLANNER !== "gemma") return deps;
 
   if (!process.env.GEMINI_API_KEY) {

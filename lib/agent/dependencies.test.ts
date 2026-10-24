@@ -3,7 +3,10 @@ import { mapPage, narrate, planTask } from "@/lib/ai";
 import { getAgentDeps } from "./dependencies";
 import { AgentError } from "./errors";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe("getAgentDeps", () => {
   it("refuses to run unconfigured, with a plain message", () => {
@@ -39,5 +42,27 @@ describe("getAgentDeps", () => {
     vi.stubEnv("ACCESSPILOT_AGENT", "fake");
     vi.stubEnv("ACCESSPILOT_FAKE_DELAY_MS", "abc");
     expect(() => getAgentDeps()).not.toThrow();
+  });
+
+  it("will not use Twinly without the real browser, or without a key", () => {
+    vi.stubEnv("ACCESSPILOT_AGENT", "fake");
+    vi.stubEnv("ACCESSPILOT_ACTIONS", "twinly");
+    vi.stubEnv("ACCESSPILOT_BROWSER", "");
+    expect(() => getAgentDeps()).toThrow(/real browser/);
+    vi.stubEnv("ACCESSPILOT_BROWSER", "real");
+    vi.stubEnv("TWINLY_API_KEY", "");
+    expect(() => getAgentDeps()).toThrow(/Twinly key/);
+  });
+
+  it("uses the real Twinly provider when configured", () => {
+    vi.stubEnv("ACCESSPILOT_AGENT", "fake");
+    vi.stubEnv("ACCESSPILOT_ACTIONS", "twinly");
+    vi.stubEnv("ACCESSPILOT_BROWSER", "real");
+    vi.stubEnv("TWINLY_API_KEY", "twk_live_" + "a".repeat(43));
+    // The Twinly client is server-only; hide jsdom's window so it can be constructed.
+    vi.stubGlobal("window", undefined);
+    const { actions } = getAgentDeps();
+    expect(actions).toBeDefined();
+    expect(actions.nextAction).toBeTypeOf("function");
   });
 });

@@ -67,10 +67,25 @@ ACCESSPILOT_AGENT=fake ACCESSPILOT_PLANNER=gemma NEXT_PUBLIC_TASK_CLIENT=http np
 Gemma's plan can ask for details the demo profile lacks (for example the essay). The task then
 pauses with `user_input.required` and continues after Resume. A planning call takes several seconds.
 
-**Twinly**: implement `ActionProvider.nextAction({ goal, screenshot, history, signal })` and return
-`{ kind: "action", action }` (a validated `BrowserAction` with coordinates already in viewport CSS
-pixels), `{ kind: "done", summary }` or `{ kind: "fail", message }`. Never return `done` or `fail`
-as a browser action.
+**Twinly** (done, `lib/twinly` plus `lib/agent/twinlyActions.ts`): turn it on with
+`ACCESSPILOT_ACTIONS=twinly` and `TWINLY_API_KEY` in `.env.local`. It needs `ACCESSPILOT_BROWSER=real`,
+because Twinly reads real screenshots.
+
+```bash
+ACCESSPILOT_AGENT=fake ACCESSPILOT_PLANNER=gemma ACCESSPILOT_BROWSER=real ACCESSPILOT_ACTIONS=twinly \
+  NEXT_PUBLIC_TASK_CLIENT=http npm run dev
+```
+
+- Each step sends Twinly the screenshot, the viewport, the goal, how the earlier steps went, and the
+  page's labelled controls as hints. It answers with one action, already converted to viewport pixels.
+- Twinly's `commits: true` becomes the action's `commits`, so the user is asked before it runs.
+- `done` and `fail` are completion states, never browser actions. A `fail` that Twinly marks
+  `sensitive_value` becomes a hand-over to the user (`user_input.required`).
+- Every step is one billed request. A task stops after 30 Twinly requests; change that with
+  `ACCESSPILOT_TWINLY_MAX_REQUESTS`. Plans have small daily quotas, so check yours first: a full
+  scholarship task takes roughly 10 requests.
+- If Twinly can't be used (usage limit, bad key, network), the task ends with a plain `task.failed`
+  message. It never falls back silently to a scripted answer.
 
 **Browser** (done, Harshini's controller in `lib/browser`): `lib/agent/browserDriver.ts` wraps it as a
 `BrowserDriver`. Turn it on with `ACCESSPILOT_BROWSER=real` (add `ACCESSPILOT_BROWSER_HEADED=1` to

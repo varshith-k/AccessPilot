@@ -272,6 +272,21 @@ export async function runTask(
         return;
       }
 
+      if (next.kind === "handoff") {
+        step++;
+        ctl.emit({ type: "step.started", step, description: `Handing the ${next.what} to you` });
+        const view = await handOff(
+          step,
+          next.reason,
+          next.what,
+          handoffInstructions({ reason: next.reason, what: next.what }),
+        );
+        if (!view) return;
+        obs = view;
+        lastTarget = undefined;
+        continue;
+      }
+
       const parsed = browserActionSchema.safeParse(next.action);
       if (!parsed.success) {
         // A malformed proposal never reaches the browser.
