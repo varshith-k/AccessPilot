@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pageMapEventSchema, type narrationEventSchema } from "@/lib/contracts";
 
 export const INTENTS = [
   "fill_application",
@@ -11,23 +12,23 @@ export const INTENTS = [
 ] as const;
 
 export const StepSchema = z.object({
-  id: z.number().int().positive(),
-  description: z.string().min(1),
+  id: z.int().positive(),
+  description: z.string().trim().min(1),
   /** True when this step changes something for real (submit, pay, send, delete). */
   requiresConfirmation: z.boolean().default(false),
 });
 
 export const MissingInfoSchema = z.object({
   /** Machine-friendly field name, e.g. "gpa". */
-  field: z.string().min(1),
+  field: z.string().trim().min(1),
   /** Plain-language question to ask the user. */
-  question: z.string().min(1),
+  question: z.string().trim().min(1),
 });
 
 export const TaskPlanSchema = z.object({
   intent: z.enum(INTENTS),
   /** One plain-language sentence suitable for being read aloud. */
-  summary: z.string().min(1),
+  summary: z.string().trim().min(1),
   steps: z.array(StepSchema).min(1).max(15),
   missingInfo: z.array(MissingInfoSchema).default([]),
   requiresConfirmation: z.boolean(),
@@ -39,8 +40,12 @@ export type TaskPlan = z.infer<typeof TaskPlanSchema>;
 export type TaskStep = z.infer<typeof StepSchema>;
 export type MissingInfo = z.infer<typeof MissingInfoSchema>;
 
-/** Events the orchestrator can ask Gemma to narrate to the user. */
-export const ProgressEventSchema = z.object({
+/** The `page.map` event minus its envelope, so the orchestrator can spread it straight into the event. */
+export const PageMapSchema = pageMapEventSchema.pick({ title: true, summary: true, regions: true });
+export type PageMap = z.infer<typeof PageMapSchema>;
+
+/** Things the orchestrator can ask Gemma to put into words for the user. */
+export const AgentProgressSchema = z.object({
   kind: z.enum([
     "started",
     "action_done",
@@ -56,4 +61,7 @@ export const ProgressEventSchema = z.object({
   pageContext: z.string().optional(),
 });
 
-export type ProgressEvent = z.infer<typeof ProgressEventSchema>;
+export type AgentProgress = z.infer<typeof AgentProgressSchema>;
+
+/** Matches the payload of the `narration` event. */
+export type Narration = Pick<z.infer<typeof narrationEventSchema>, "text" | "priority">;

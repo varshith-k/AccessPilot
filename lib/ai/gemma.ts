@@ -1,24 +1,46 @@
-import { ZodError } from "zod";
+import { ZodError, type ZodType } from "zod";
 import {
   EXPLAIN_SYSTEM_PROMPT,
   NARRATE_SYSTEM_PROMPT,
+  PAGE_MAP_SYSTEM_PROMPT,
   PLAN_SYSTEM_PROMPT,
   REPAIR_PROMPT,
   buildExplainPrompt,
   buildNarratePrompt,
+  buildPageMapPrompt,
   buildPlanPrompt,
 } from "./prompts";
-import { TaskPlanSchema, type ProgressEvent, type TaskPlan } from "./schema";
+import {
+  PageMapSchema,
+  TaskPlanSchema,
+  type AgentProgress,
+  type Narration,
+  type PageMap,
+  type TaskPlan,
+} from "./schema";
 
 const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 /** Page text beyond this is cut so a huge page cannot blow the context or the latency budget. */
 const MAX_PAGE_CHARS = 24_000;
 /** Steps containing these words always need user approval, whatever the model said. */
-const COMMIT_PATTERN = /\b(submit|pay|purchase|buy|checkout|send|delete|remove|book|confirm order|place order|sign up|register)\b/i;
+const COMMIT_PATTERN =
+  /\b(submit|pay|purchase|buy|checkout|send|delete|remove|book|confirm order|place order|sign up|register)\b/i;
+/** Narration kinds that need the user's attention right now rather than at the next pause. */
+const ASSERTIVE_KINDS = new Set<AgentProgress["kind"]>([
+  "needs_info",
+  "needs_approval",
+  "action_failed",
+  "failed",
+]);
+
+/** "minimal" turns Gemma's reasoning off (about 5x faster); "high" lets it think before answering. */
+export type ThinkingLevel = "minimal" | "high";
 
 export interface GemmaOptions {
   apiKey?: string;
+  /** Overrides the per-call default: planning thinks, narration and page maps do not. */
+  thinking?: ThinkingLevel;
   model?: string;
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
@@ -26,8 +48,8 @@ export interface GemmaOptions {
 }
 
 export class GemmaError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
-    super(message);
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
     this.name = "GemmaError";
   }
 }
@@ -37,7 +59,13 @@ interface Turn {
   text: string;
 }
 
-async function generate(system: string, turns: Turn[], opts: GemmaOptions, temperature: number): Promise<string> {
+async function generate(
+  system: string,
+  turns: Turn[],
+  opts: GemmaOptions,
+  temperature: number,
+  thinking: ThinkingLevel,
+): Promise<string> {
   const apiKey = opts.apiKey ?? process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GemmaError("GEMINI_API_KEY is not set");
   const model = opts.model ?? process.env.GEMMA_MODEL ?? DEFAULT_MODEL;
@@ -51,7 +79,10 @@ async function generate(system: string, turns: Turn[], opts: GemmaOptions, tempe
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
         contents: turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
-        generationConfig: { temperature },
+        generationConfig: {
+          temperature,
+          thinkingConfig: { thinkingLevel: opts.thinking ?? thinking },
+        },
       }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
     });
@@ -66,7 +97,11 @@ async function generate(system: string, turns: Turn[], opts: GemmaOptions, tempe
     candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
   };
   // Skip thinking parts if the API returns them; keep only the answer text.
-  const text = data.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? "").join("").trim();
+  const text = data.candidates?.[0]?.content?.parts
+    ?.filter((p) => !p.thought)
+    .map((p) => p.text ?? "")
+    .join("")
+    .trim();
   if (!text) throw new GemmaError("Gemma returned an empty response");
   return text;
 }
@@ -97,17 +132,50 @@ export function enforceConfirmation(plan: TaskPlan): TaskPlan {
     ...s,
     requiresConfirmation: s.requiresConfirmation || COMMIT_PATTERN.test(s.description),
   }));
-  return { ...plan, steps, requiresConfirmation: plan.requiresConfirmation || steps.some((s) => s.requiresConfirmation) };
+  return {
+    ...plan,
+    steps,
+    requiresConfirmation: plan.requiresConfirmation || steps.some((s) => s.requiresConfirmation),
+  };
 }
 
 function truncate(pageContext: string): string {
-  return pageContext.length > MAX_PAGE_CHARS ? `${pageContext.slice(0, MAX_PAGE_CHARS)}\n[page truncated]` : pageContext;
+  return pageContext.length > MAX_PAGE_CHARS
+    ? `${pageContext.slice(0, MAX_PAGE_CHARS)}\n[page truncated]`
+    : pageContext;
 }
 
-/**
- * Turns a request plus the current page into a validated plan.
- * Retries once, feeding validation errors back to the model.
- */
+/** Asks for JSON, validates it, and retries once with the validation errors fed back to the model. */
+async function generateValidated<T>(
+  system: string,
+  prompt: string,
+  schema: ZodType<T>,
+  what: string,
+  opts: GemmaOptions,
+  thinking: ThinkingLevel,
+): Promise<T> {
+  const turns: Turn[] = [{ role: "user", text: prompt }];
+  let lastProblem = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const reply = await generate(system, turns, opts, 0.2, thinking);
+    try {
+      return schema.parse(extractJson(reply));
+    } catch (err) {
+      if (!(err instanceof SyntaxError || err instanceof ZodError)) throw err;
+      lastProblem =
+        err instanceof ZodError
+          ? err.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("\n")
+          : err.message;
+      turns.push(
+        { role: "model", text: reply },
+        { role: "user", text: REPAIR_PROMPT(lastProblem) },
+      );
+    }
+  }
+  throw new GemmaError(`Gemma did not return a valid ${what} after retry: ${lastProblem}`);
+}
+
+/** Turns a request plus the current page into a validated plan. */
 export async function planTask(
   goal: string,
   pageContext: string,
@@ -115,36 +183,53 @@ export async function planTask(
   opts: GemmaOptions = {},
 ): Promise<TaskPlan> {
   if (!goal.trim()) throw new GemmaError("Goal is empty");
-  const turns: Turn[] = [{ role: "user", text: buildPlanPrompt(goal, truncate(pageContext), userDetails) }];
-
-  let lastProblem = "";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const reply = await generate(PLAN_SYSTEM_PROMPT, turns, opts, 0.2);
-    try {
-      return enforceConfirmation(TaskPlanSchema.parse(extractJson(reply)));
-    } catch (err) {
-      if (!(err instanceof SyntaxError || err instanceof ZodError)) throw err;
-      lastProblem = err instanceof ZodError
-        ? err.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("\n")
-        : err.message;
-      turns.push({ role: "model", text: reply }, { role: "user", text: REPAIR_PROMPT(lastProblem) });
-    }
-  }
-  throw new GemmaError(`Gemma did not return a valid plan after retry: ${lastProblem}`);
+  const plan = await generateValidated(
+    PLAN_SYSTEM_PROMPT,
+    buildPlanPrompt(goal, truncate(pageContext), userDetails),
+    TaskPlanSchema,
+    "plan",
+    opts,
+    "high",
+  );
+  return enforceConfirmation(plan);
 }
 
-/** Short spoken-style message for the user about what the agent just did or needs. */
-export async function narrate(event: ProgressEvent, opts: GemmaOptions = {}): Promise<string> {
+/** Describes the layout of a page for the `page.map` event. */
+export async function mapPage(pageContext: string, opts: GemmaOptions = {}): Promise<PageMap> {
+  return generateValidated(
+    PAGE_MAP_SYSTEM_PROMPT,
+    buildPageMapPrompt(truncate(pageContext)),
+    PageMapSchema,
+    "page map",
+    opts,
+    "minimal",
+  );
+}
+
+/** Short spoken-style message for the `narration` event. Urgent kinds are `assertive`. */
+export async function narrate(event: AgentProgress, opts: GemmaOptions = {}): Promise<Narration> {
   const safe = { ...event, pageContext: event.pageContext && truncate(event.pageContext) };
-  return generate(NARRATE_SYSTEM_PROMPT, [{ role: "user", text: buildNarratePrompt(safe) }], opts, 0.4);
+  const text = await generate(
+    NARRATE_SYSTEM_PROMPT,
+    [{ role: "user", text: buildNarratePrompt(safe) }],
+    opts,
+    0.4,
+    "minimal",
+  );
+  return { text, priority: ASSERTIVE_KINDS.has(event.kind) ? "assertive" : "polite" };
 }
 
 /** Plain-language explanation of a page, or an answer to a question about it. */
-export async function explainPage(pageContext: string, question?: string, opts: GemmaOptions = {}): Promise<string> {
+export async function explainPage(
+  pageContext: string,
+  question?: string,
+  opts: GemmaOptions = {},
+): Promise<string> {
   return generate(
     EXPLAIN_SYSTEM_PROMPT,
     [{ role: "user", text: buildExplainPrompt(truncate(pageContext), question) }],
     opts,
     0.3,
+    "minimal",
   );
 }
