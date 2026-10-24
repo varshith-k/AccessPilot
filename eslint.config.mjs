@@ -19,6 +19,11 @@ const config = [
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },
       ],
       "no-console": ["error", { allow: ["warn", "error", "debug"] }],
+      // Scrollable regions must be keyboard-focusable so they can be scrolled without a mouse.
+      "jsx-a11y/no-noninteractive-tabindex": [
+        "error",
+        { tags: [], roles: ["tabpanel", "region"], allowExpressionValues: true },
+      ],
     },
   },
   prettier,
