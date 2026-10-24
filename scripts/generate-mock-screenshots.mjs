@@ -223,7 +223,7 @@ const screenshots = {
   confirmation: confirmationPage(),
   loginEmpty: loginForm({ emailFilled: false, passwordFilled: false, active: -1 }),
   loginEmail: loginForm({ emailFilled: true, passwordFilled: false, active: 0 }),
-  loginPassword: loginForm({ emailFilled: true, passwordFilled: false, active: 1 }),
+  loginHandoff: loginForm({ emailFilled: true, passwordFilled: false, active: 1 }),
   loginSubmit: loginForm({ emailFilled: true, passwordFilled: true, active: 2 }),
   dashboard: dashboardPage(),
   deadline: deadlinePage(),

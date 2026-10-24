@@ -67,6 +67,8 @@ describe("AccessPilotApp", () => {
     expect(within(dialog).getByRole("heading", { level: 2 })).toHaveFocus();
     expect(document.title).toBe("Waiting for your approval — AccessPilot");
     expect(liveText("assertive")).toMatch(/^Approval needed\./);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "?", code: "Slash" });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(
       screen.getByRole("img", { name: /Submit button is focused but not pressed/ }),
     ).toBeVisible();
