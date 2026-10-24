@@ -72,23 +72,28 @@ pauses with `user_input.required` and continues after Resume. A planning call ta
 pixels), `{ kind: "done", summary }` or `{ kind: "fail", message }`. Never return `done` or `fail`
 as a browser action.
 
-**Browser**: wrap the session and executor as a `BrowserDriver`:
+**Browser** (done, Harshini's controller in `lib/browser`): `lib/agent/browserDriver.ts` wraps it as a
+`BrowserDriver`. Turn it on with `ACCESSPILOT_BROWSER=real` (add `ACCESSPILOT_BROWSER_HEADED=1` to
+watch the window). The browser may only visit the origin of the address the user gave. The scripted
+Twinly stand-in then finds controls by name on the live page.
 
-- `open(url)` navigates (subject to the URL policy) and returns `{ screenshot, pageContext }`.
-- `observe()` returns the current `{ screenshot, pageContext }`.
-- `execute` is `ExecuteBrowserAction`. Results should include `screenshot` and `pageContext`;
-  if they don't, the orchestrator calls `observe()` after each action.
-- `close()` is safe to call twice.
+```bash
+ACCESSPILOT_AGENT=fake ACCESSPILOT_PLANNER=gemma ACCESSPILOT_BROWSER=real \
+  NEXT_PUBLIC_TASK_CLIENT=http npm run dev          # then use http://localhost:4000/scholarship
+```
 
-Page context labels are how the orchestrator spots password and CAPTCHA fields under a click, so
-please include `role`, `label` and `bounds` for form controls.
+How the orchestrator works with her controller's rules:
+
+- Clicks are only accepted against the latest view, so the orchestrator stamps each click with the
+  `observationId` of the view it was planned from, and moves to the newest one after every action.
+- The first `execute` call for a consequential action carries no approval. The controller answers with its
+  own approval id; the user's approval is then applied to that id, so the user is asked once.
+- `user_input_required` results (private or manual controls) become `user_input.required` and wait for
+  Resume. Elements the page marks `sensitive`, or `type=password`, are handed over before any click.
 
 ## Open points for the other owners
 
-- **Approval ids.** For `commits: true` the orchestrator creates its own id (`appr_N`) and passes
-  `{ approvalId, actionId }` in `ExecuteActionOptions`. If the executor insists on matching its own
-  pending id, have it return `approval_required` first; the orchestrator then asks the user and
-  retries with the executor's id.
+- **Approval ids.** Settled: see "How the orchestrator works with her controller's rules" above.
 - **`navigate` events.** `actionTypeSchema` has no `navigate`, so a navigate step is reported as
   `wait` with the label "Opened host". Adding `navigate` to the contract needs Nandhan.
 - **Screenshot size.** Screenshots over 700,000 characters are skipped. Downscale or use JPEG in the
@@ -97,6 +102,6 @@ please include `role`, `label` and `bounds` for form controls.
 
 ## Demo site
 
-`demo-site/` is a plain, accessible scholarship form (name, email, program, start date, essay, Save
+`demo-site/scholarship.html` (served by `scholarship-server.mjs`) is a plain, accessible scholarship form (name, email, program, start date, essay, Save
 draft, Submit). `npm run demo-site` serves it on `127.0.0.1:4000`. A complete submission returns
 "Confirmation number 4821", matching the scripted demo. It stores nothing and escapes everything it echoes.

@@ -5,6 +5,7 @@ import {
   type BrowserAction,
   type BrowserPageContext,
   type NarrationPriority,
+  type UserInputReason,
 } from "@/lib/contracts";
 import { AbortedError, abortable, withTimeout } from "./errors";
 import { detectHandoff, elementAt, handoffInstructions, maskIfSensitive } from "./sensitive";
@@ -244,7 +245,13 @@ export async function runTask(
 
     while (step < limits.maxSteps) {
       const next = await guard(
-        deps.actions.nextAction({ goal: input.goal, screenshot: obs.screenshot, history, signal }),
+        deps.actions.nextAction({
+          goal: input.goal,
+          screenshot: obs.screenshot,
+          pageContext: obs.pageContext,
+          history,
+          signal,
+        }),
       );
 
       if (next.kind === "done") {
@@ -270,7 +277,13 @@ export async function runTask(
         }
         continue;
       }
-      const action = parsed.data;
+      // Clicks are only valid against the view they were planned from, so name that view.
+      const action: BrowserAction =
+        (parsed.data.type === "click" || parsed.data.type === "double_click") &&
+        obs.observationId &&
+        !parsed.data.observationId
+          ? { ...parsed.data, observationId: obs.observationId }
+          : parsed.data;
       step++;
       const totalSteps = Math.max(plan.steps.length, step);
       ctl.emit({ type: "step.started", step, description: describe(action, false), totalSteps });
@@ -279,24 +292,20 @@ export async function runTask(
       const handoff = detectHandoff(action, obs.pageContext, lastTarget);
       if (handoff) {
         history.push({ action, outcome: "skipped" });
-        const instructions = handoffInstructions(handoff);
-        await say({ kind: "needs_info", detail: `A ${handoff.what} needs you.` }, instructions);
-        ctl.emit({ type: "user_input.required", reason: handoff.reason, instructions });
-        if ((await ctl.waitForResume()) === "stopped") return;
-        obs = await guard(browser.observe());
-        lastTarget = undefined;
-        ctl.emit({
-          type: "step.completed",
+        const next = await handOff(
           step,
-          description: `You handled the ${handoff.what}`,
-          action: { type: "wait", label: "Handed to you" },
-        });
-        sendScreenshot(step, obs, `After you handled the ${handoff.what}`);
+          handoff.reason,
+          handoff.what,
+          handoffInstructions(handoff),
+        );
+        if (!next) return;
+        obs = next;
+        lastTarget = undefined;
         continue;
       }
 
-      // Consequential actions need the user's exact approval.
-      let approval: { approvalId: string; actionId: string } | undefined;
+      // Consequential actions need the user's exact approval before the browser is touched.
+      let approved = false;
       if (action.commits) {
         const decision = await requestApproval(action, obs);
         if (decision === "stopped") return;
@@ -304,13 +313,23 @@ export async function runTask(
           await finishDenied(action);
           return;
         }
-        approval = decision;
+        approved = true;
       }
 
-      let result: ActionResult = await execute(action, approval);
+      // The first call never carries an approval. A controller that wants one answers with its own
+      // id, and the user's approval (already given, or asked for below) is applied to that id.
+      let result: ActionResult = await execute(action);
       if (result.status === "approval_required") {
-        // The browser's own safety check flagged an action Twinly did not.
-        if (approval) {
+        if (!approved) {
+          const decision = await requestApproval(action, obs, result.approvalId);
+          if (decision === "stopped") return;
+          if (decision === "denied") {
+            await finishDenied(action);
+            return;
+          }
+        }
+        result = await execute(action, { approvalId: result.approvalId, actionId: action.id });
+        if (result.status === "approval_required") {
           fail(
             "approval_mismatch",
             "The browser did not accept the approval. Nothing was done.",
@@ -318,16 +337,24 @@ export async function runTask(
           );
           return;
         }
-        const decision = await requestApproval(action, obs, result.approvalId);
-        if (decision === "stopped") return;
-        if (decision === "denied") {
-          await finishDenied(action);
-          return;
-        }
-        result = await execute(action, decision);
       }
 
       if (result.status === "cancelled") return;
+
+      // The browser itself says a field is the user's to fill in.
+      if (result.status === "user_input_required") {
+        history.push({ action, outcome: "skipped" });
+        const what = result.reason === "sensitive_value" ? "sensitive field" : "control";
+        const instructions =
+          result.reason === "sensitive_value"
+            ? handoffInstructions({ reason: "sensitive_value", what })
+            : "Please complete this control in the browser window, then press Continue.";
+        const next = await handOff(step, result.reason, what, instructions);
+        if (!next) return;
+        obs = next;
+        lastTarget = undefined;
+        continue;
+      }
 
       const worked = result.status === "executed" && result.verification !== "failed";
       if (!worked) {
@@ -344,23 +371,14 @@ export async function runTask(
           { kind: "action_failed", detail: describe(action, true) },
           "That didn't work. I'll try another way.",
         );
-        obs = await guard(browser.observe());
+        // A failed result usually carries the page as it is now; otherwise look again.
+        obs = await currentView(result, obs);
         continue;
       }
 
       failures = 0;
       history.push({ action, outcome: "executed" });
-      obs = {
-        screenshot: result.screenshot ?? obs.screenshot,
-        pageContext: result.pageContext ?? obs.pageContext,
-      };
-      if (!result.screenshot || !result.pageContext) {
-        const fresh = await guard(browser.observe());
-        obs = {
-          screenshot: result.screenshot ?? fresh.screenshot,
-          pageContext: result.pageContext ?? fresh.pageContext,
-        };
-      }
+      obs = await currentView(result, obs);
       if (action.type === "click" || action.type === "double_click") {
         lastTarget = elementAt(obs.pageContext, action.x, action.y)?.label ?? action.label;
       } else if (action.type !== "type" && action.type !== "key") {
@@ -397,6 +415,42 @@ export async function runTask(
     } catch {
       // Closing is best effort; the task outcome is already decided.
     }
+  }
+
+  /** The page as of this result. Uses what the browser sent, and looks again only for what is missing. */
+  async function currentView(result: ActionResult, previous: Observation): Promise<Observation> {
+    if (result.screenshot && result.pageContext) {
+      return {
+        ...(result.observationId ? { observationId: result.observationId } : {}),
+        screenshot: result.screenshot,
+        pageContext: result.pageContext,
+      };
+    }
+    return abortable(browser!.observe(), signal).catch((error: unknown) => {
+      if (error instanceof AbortedError) throw error;
+      return previous;
+    });
+  }
+
+  /** Tells the user what to do, waits for Continue, and returns the fresh view (or null if stopped). */
+  async function handOff(
+    step: number,
+    reason: UserInputReason,
+    what: string,
+    instructions: string,
+  ): Promise<Observation | null> {
+    await say({ kind: "needs_info", detail: `A ${what} needs you.` }, instructions);
+    ctl.emit({ type: "user_input.required", reason, instructions });
+    if ((await ctl.waitForResume()) === "stopped") return null;
+    const fresh = await abortable(browser!.observe(), signal);
+    ctl.emit({
+      type: "step.completed",
+      step,
+      description: `You handled the ${what}`,
+      action: { type: "wait", label: "Handed to you" },
+    });
+    sendScreenshot(step, fresh, `After you handled the ${what}`);
+    return fresh;
   }
 
   async function finishDenied(action: BrowserAction): Promise<void> {

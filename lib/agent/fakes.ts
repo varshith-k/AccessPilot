@@ -137,3 +137,56 @@ export function createFakeDeps(options: FakeOptions = {}): AgentDeps {
     },
   };
 }
+
+/** One step of a label-driven script: act on the control whose name contains `on`. */
+export type LabelStep = { click: string; commits?: boolean } | { type: string; into?: string };
+
+/**
+ * Stand-in for Twinly on real pages. It finds controls by name in the page context, so it works on
+ * any layout, then proposes clicks and typing the way Twinly would. It never decides anything itself:
+ * what it does is exactly the script.
+ */
+export function createLabelDrivenActions(steps: LabelStep[], doneSummary: string): ActionProvider {
+  let index = 0;
+  const find = (page: BrowserPageContext | undefined, name: string) =>
+    page?.elements.find((el) => el.bounds && el.label.toLowerCase().includes(name.toLowerCase()));
+
+  return {
+    async nextAction({ pageContext }): Promise<NextAction> {
+      const step = steps[index++];
+      if (!step) return { kind: "done", summary: doneSummary };
+      const id = `script_${index}`;
+      if ("type" in step) {
+        return {
+          kind: "action",
+          action: { id, type: "type", text: step.type, label: step.into, commits: false },
+        };
+      }
+      const target = find(pageContext, step.click);
+      if (!target?.bounds)
+        return { kind: "fail", message: `I couldn't find "${step.click}" on the page.` };
+      return {
+        kind: "action",
+        action: {
+          id,
+          type: "click",
+          x: target.bounds.x + target.bounds.width / 2,
+          y: target.bounds.y + target.bounds.height / 2,
+          label: step.click,
+          commits: step.commits ?? false,
+        },
+      };
+    },
+  };
+}
+
+/** The scholarship flow on the demo site (demo-site/scholarship.html), as label-driven steps. */
+export const SCHOLARSHIP_STEPS: LabelStep[] = [
+  { click: "Full name" },
+  { type: "Alex Morgan", into: "Full name field" },
+  { click: "Email" },
+  { type: "alex@example.com", into: "Email field" },
+  { click: "Program" },
+  { type: "Computer Science", into: "Program field" },
+  { click: "Submit application", commits: true },
+];

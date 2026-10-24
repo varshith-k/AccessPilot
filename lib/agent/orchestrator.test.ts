@@ -21,10 +21,8 @@ describe("happy path", () => {
     run.store.approve(run.task.id, approval.approvalId);
     await run.finished;
 
-    expect(execute).toHaveBeenLastCalledWith(
-      submit,
-      expect.objectContaining({ approval: { approvalId: approval.approvalId, actionId: "s" } }),
-    );
+    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute.mock.calls[2]?.[0].id).toBe("s");
     expect(run.types()).toEqual(
       expect.arrayContaining([
         "task.started",
@@ -446,5 +444,175 @@ describe("narration and screenshots", () => {
     run.store.resume(run.task.id);
     await run.finished;
     expect(run.last()?.type).toBe("task.completed");
+  });
+});
+
+describe("working with the real browser controller's protocol", () => {
+  const shot = {
+    imageDataUrl: "data:image/png;base64,AAAA",
+    width: 10,
+    height: 10,
+    coordinateSpace: "viewport-css-pixels" as const,
+  };
+  const page = {
+    url: "http://localhost:4000/s",
+    title: "Form",
+    elements: [
+      { role: "textbox", label: "Name", bounds: { x: 0, y: 0, width: 200, height: 40 } },
+      {
+        role: "textbox",
+        label: "Code",
+        sensitive: true,
+        bounds: { x: 0, y: 50, width: 200, height: 40 },
+      },
+    ],
+  };
+  const view = (observationId: string) => ({ observationId, screenshot: shot, pageContext: page });
+
+  it("asks the user once, then applies that approval to the controller's own id", async () => {
+    const calls: Array<{ approval?: { approvalId: string; actionId: string } } | undefined> = [];
+    const submit = click("s", 5, 5, "Submit application", true);
+    const { deps } = makeDeps(
+      [act(submit), done()],
+      {},
+      {
+        execute: vi.fn(async (a, options) => {
+          calls.push(options);
+          if (!options?.approval)
+            return { actionId: a.id, status: "approval_required" as const, approvalId: "ctl-9" };
+          return options.approval.approvalId === "ctl-9"
+            ? { actionId: a.id, status: "executed" as const, verification: "passed" as const }
+            : {
+                actionId: a.id,
+                status: "failed" as const,
+                error: { code: "invalid_approval", message: "no" },
+              };
+        }),
+      },
+    );
+    const run = start(deps);
+    await run.waitFor("approval.required");
+    const asked = run.task.events.filter((e) => e.type === "approval.required");
+    expect(asked).toHaveLength(1);
+    expect(calls).toHaveLength(0); // nothing reaches the browser before the user answers
+    run.store.approve(run.task.id, run.find("approval.required")!.approvalId);
+    await run.finished;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.approval).toBeUndefined();
+    expect(calls[1]?.approval).toEqual({ approvalId: "ctl-9", actionId: "s" });
+    expect(run.last()?.type).toBe("task.completed");
+  });
+
+  it("gives up cleanly if the controller keeps asking for approval after it was applied", async () => {
+    const { deps } = makeDeps(
+      [act(click("s", 5, 5, "Submit", true)), done()],
+      {},
+      {
+        execute: vi.fn(async (a) => ({
+          actionId: a.id,
+          status: "approval_required" as const,
+          approvalId: "ctl-1",
+        })),
+      },
+    );
+    const run = start(deps);
+    await run.waitFor("approval.required");
+    run.store.approve(run.task.id, run.find("approval.required")!.approvalId);
+    await run.finished;
+    expect(run.last()).toMatchObject({ type: "task.failed", code: "approval_mismatch" });
+  });
+
+  it("hands over when the browser says a field is the user's, using its own plain wording", async () => {
+    const calls: string[] = [];
+    const { deps } = makeDeps(
+      [act(click("p", 5, 5, "Field")), act(click("n", 5, 5, "Next")), done()],
+      {},
+      {
+        execute: vi.fn(async (a) => {
+          calls.push(a.id);
+          return a.id === "p"
+            ? {
+                actionId: a.id,
+                status: "user_input_required" as const,
+                reason: "sensitive_value" as const,
+                instructions: "ask for a fresh observation",
+              }
+            : { actionId: a.id, status: "executed" as const, verification: "passed" as const };
+        }),
+      },
+    );
+    const run = start(deps);
+    await run.waitFor("user_input.required");
+    const ask = run.find("user_input.required")!;
+    expect(ask.reason).toBe("sensitive_value");
+    expect(ask.instructions).toMatch(/press Continue/);
+    expect(ask.instructions).not.toContain("fresh observation");
+    run.store.resume(run.task.id);
+    await run.finished;
+    expect(calls).toEqual(["p", "n"]);
+    expect(run.last()?.type).toBe("task.completed");
+  });
+
+  it("hands over at once when the page marks the element under the click as sensitive", async () => {
+    const { deps, execute } = makeDeps(
+      [act(click("c", 10, 60, "Field")), done()],
+      {},
+      {
+        open: async () => view("obs-1"),
+        observe: async () => view("obs-1"),
+      },
+    );
+    const run = start(deps);
+    await run.waitFor("user_input.required");
+    expect(execute).not.toHaveBeenCalled();
+    run.store.stop(run.task.id);
+    await run.finished;
+  });
+
+  it("names the view each click was planned from, and moves on to the newest one", async () => {
+    let n = 1;
+    const seen: Array<string | undefined> = [];
+    const { deps } = makeDeps(
+      [act(click("a", 5, 5, "Name")), act(click("b", 5, 5, "Name")), done()],
+      {},
+      {
+        open: async () => view("obs-1"),
+        observe: async () => view(`obs-${n}`),
+        execute: vi.fn(async (a) => {
+          seen.push("observationId" in a ? a.observationId : undefined);
+          n++;
+          return {
+            actionId: a.id,
+            status: "executed" as const,
+            verification: "passed" as const,
+            ...view(`obs-${n}`),
+          };
+        }),
+      },
+    );
+    const run = start(deps);
+    await run.finished;
+    expect(seen).toEqual(["obs-1", "obs-2"]);
+  });
+
+  it("uses the page a failed result carries instead of looking again", async () => {
+    const observe = vi.fn(async () => view("obs-looked-again"));
+    const { deps } = makeDeps(
+      [act(click("a", 5, 5, "Name")), done()],
+      {},
+      {
+        open: async () => view("obs-1"),
+        observe,
+        execute: vi.fn(async (a) => ({
+          actionId: a.id,
+          status: "failed" as const,
+          error: { code: "stale_observation", message: "changed" },
+          ...view("obs-from-failure"),
+        })),
+      },
+    );
+    const run = start(deps);
+    await run.finished;
+    expect(observe).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import { mapPage, narrate, planTask } from "@/lib/ai";
 import { AgentError } from "./errors";
-import { createFakeDeps } from "./fakes";
+import { createRealBrowserFactory } from "./browserDriver";
+import { SCHOLARSHIP_STEPS, createFakeDeps, createLabelDrivenActions } from "./fakes";
 import type { AgentDeps, Planner } from "./types";
 
 /** Real Gemma 4 for planning, page maps and narration. Needs `GEMINI_API_KEY` on the server. */
@@ -16,6 +17,9 @@ function fakeDelay(): { stepDelayMs: number } | Record<string, never> {
  * Builds the modules for one task.
  *
  * - `ACCESSPILOT_AGENT=fake` runs scripted stand-ins for Gemma, Twinly and the browser.
+ * - `ACCESSPILOT_BROWSER=real` swaps the scripted browser for real Chromium (lib/browser). The scripted
+ *   Twinly then finds the form controls by name on the live page. `ACCESSPILOT_BROWSER_HEADED=1`
+ *   shows the window.
  * - `ACCESSPILOT_PLANNER=gemma` swaps in the real Gemma planner (lib/ai) for the fake one, so Gemma
  *   plans, describes pages and narrates while Twinly and the browser are still scripted.
  *
@@ -30,7 +34,16 @@ export function getAgentDeps(): AgentDeps {
       "The AccessPilot agent isn't set up on this server yet. Ask the person running it to finish the setup.",
     );
   }
-  const deps = createFakeDeps(fakeDelay());
+  let deps = createFakeDeps(fakeDelay());
+  if (process.env.ACCESSPILOT_BROWSER === "real") {
+    deps = {
+      ...deps,
+      createBrowser: createRealBrowserFactory({
+        headed: process.env.ACCESSPILOT_BROWSER_HEADED === "1",
+      }),
+      actions: createLabelDrivenActions(SCHOLARSHIP_STEPS, "Submitted. Confirmation number 4821."),
+    };
+  }
   if (process.env.ACCESSPILOT_PLANNER !== "gemma") return deps;
 
   if (!process.env.GEMINI_API_KEY) {
