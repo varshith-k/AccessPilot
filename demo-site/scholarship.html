@@ -110,13 +110,13 @@
         <input id="email" name="email" type="email" autocomplete="email" required />
 
         <label for="program">Program <span class="hint">(required)</span></label>
-        <select id="program" name="program" required>
-          <option value="">Choose a program</option>
-          <option>Computer Science</option>
-          <option>Electrical Engineering</option>
-          <option>Mathematics</option>
-          <option>Data Science</option>
-        </select>
+        <input id="program" name="program" list="programs" autocomplete="off" required />
+        <datalist id="programs">
+          <option value="Computer Science"></option>
+          <option value="Electrical Engineering"></option>
+          <option value="Mathematics"></option>
+          <option value="Data Science"></option>
+        </datalist>
 
         <label for="start">Start date</label>
         <input id="start" name="start" type="date" />

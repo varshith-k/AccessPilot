@@ -52,6 +52,10 @@ export function detectHandoff(
 
   if (action.type === "click" || action.type === "double_click") {
     const el = elementAt(page, action.x, action.y);
+    // The browser knows more than a label: it flags password inputs and other private fields itself.
+    if (el?.sensitive || el?.inputType === "password") {
+      return { reason: "sensitive_value", what: "sensitive field" };
+    }
     return classify(el ? `${el.role} ${el.label}` : undefined);
   }
   if (action.type === "type") {

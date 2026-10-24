@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { startDemoSite } from "../../demo-site/server";
+import { startDemoSite } from "../../demo-site/browser-demo-server";
 import { createBrowserController, type BrowserController } from "../../lib/browser/executor";
 import type { BrowserAction, ActionResult } from "../../lib/contracts/browser";
 
@@ -35,7 +35,7 @@ describe("browser controller", () => {
     demo = await startDemoSite();
   });
   afterAll(async () => {
-    await demo.close();
+    await demo?.close();
   });
 
   it("executes all action types, serializes typing and returns verified observations", async () => {
