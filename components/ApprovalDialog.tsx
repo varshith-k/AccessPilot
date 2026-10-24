@@ -11,6 +11,8 @@ export interface ApprovalDialogProps {
   onDeny(): void;
   /** Where focus goes when the dialog closes. */
   returnFocusRef: RefObject<HTMLElement | null>;
+  /** How to answer by voice, shown when voice input is available. */
+  voiceHint?: string | undefined;
 }
 
 /**
@@ -22,6 +24,7 @@ export function ApprovalDialog({
   onApprove,
   onDeny,
   returnFocusRef,
+  voiceHint,
 }: ApprovalDialogProps) {
   const id = useId();
   const headingId = `${id}-heading`;
@@ -83,6 +86,7 @@ export function ApprovalDialog({
           )}
           <p className="text-sm text-muted">
             Nothing is submitted until you choose. Pressing Escape means Don&apos;t submit.
+            {voiceHint && ` ${voiceHint}`}
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={onDeny} className={buttonStyles.secondary}>
