@@ -43,10 +43,10 @@ const executionOptionsSchema = z.object({
 
 interface SavedObservation extends BrowserObservation {
   fingerprint: string;
-  nativeSubmitFingerprint: string;
+  domFingerprint: string;
 }
 interface PendingApproval {
-  nativeSubmit: boolean;
+  domTarget: boolean;
   id: string;
   action: string;
   actionId: string;
@@ -241,9 +241,9 @@ export class BrowserController {
     const fingerprint = createHash("sha256")
       .update(JSON.stringify({ image: screenshot.imageDataUrl, pageContext, state }))
       .digest("hex");
-    // Native submit controls retain their meaning across hover and focus changes.
+    // Standard DOM controls retain their meaning across hover and focus changes.
     // Bind approval to DOM, values, layout, viewport and scroll instead of pixels.
-    const nativeSubmitFingerprint = createHash("sha256")
+    const domFingerprint = createHash("sha256")
       .update(
         JSON.stringify({
           pageContext,
@@ -263,7 +263,7 @@ export class BrowserController {
       screenshot,
       pageContext,
       fingerprint,
-      nativeSubmitFingerprint,
+      domFingerprint,
     };
     this.observation = observation;
     return observation;
@@ -290,6 +290,8 @@ export class BrowserController {
     const before = await this.readObservation();
     const canonical = JSON.stringify(action);
     const coordinateAction = action.type === "click" || action.type === "double_click";
+    const targetAction = coordinateAction || action.type === "type" || action.type === "key";
+    const target = targetAction ? await inspectTarget(this.session.page, action) : undefined;
     if (coordinateAction) {
       const viewport = this.session.page.viewportSize()!;
       if (action.x >= viewport.width || action.y >= viewport.height)
@@ -297,15 +299,17 @@ export class BrowserController {
           "invalid_coordinates",
           "The click is outside the browser viewport.",
         );
-      const reviewedNativeSubmit =
-        this.pending?.nativeSubmit &&
+      const reviewedDomAction =
+        this.pending?.domTarget &&
         this.pending.action === canonical &&
-        this.pending.fingerprint === before.nativeSubmitFingerprint;
+        this.pending.fingerprint === before.domFingerprint;
       if (
-        !reviewedNativeSubmit &&
+        !reviewedDomAction &&
         (!previous ||
           action.observationId !== previous.observationId ||
-          previous.fingerprint !== before.fingerprint)
+          (target?.domTarget
+            ? previous.domFingerprint !== before.domFingerprint
+            : previous.fingerprint !== before.fingerprint))
       ) {
         this.pending = undefined;
         throw new ExecutionError(
@@ -323,8 +327,6 @@ export class BrowserController {
       throw new ExecutionError("invalid_scroll", "Scroll by at most 10000 pixels per action.");
     if (action.type === "navigate") this.session.assertUrlAllowed(action.url);
 
-    const targetAction = coordinateAction || action.type === "type" || action.type === "key";
-    const target = targetAction ? await inspectTarget(this.session.page, action) : undefined;
     const leavingField =
       action.type === "key" && ["Tab", "Shift+Tab", "Escape"].includes(action.key);
     const activatesTarget =
@@ -369,7 +371,7 @@ export class BrowserController {
     if (
       this.pending &&
       (this.pending.fingerprint !==
-        (this.pending.nativeSubmit ? before.nativeSubmitFingerprint : before.fingerprint) ||
+        (this.pending.domTarget ? before.domFingerprint : before.fingerprint) ||
         this.pending.action !== canonical)
     ) {
       if (this.pending.action !== canonical)
@@ -397,14 +399,12 @@ export class BrowserController {
     }
     if (needsApproval && !options.approval) {
       this.pending ??= {
-        nativeSubmit: coordinateAction && Boolean(target?.nativeSubmit),
+        domTarget: coordinateAction && Boolean(target?.domTarget),
         id: randomUUID(),
         action: canonical,
         actionId: action.id,
         fingerprint:
-          coordinateAction && target?.nativeSubmit
-            ? before.nativeSubmitFingerprint
-            : before.fingerprint,
+          coordinateAction && target?.domTarget ? before.domFingerprint : before.fingerprint,
       };
       const observation = this.publicObservation(before);
       return {

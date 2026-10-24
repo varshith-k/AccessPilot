@@ -201,9 +201,9 @@ Mark additional sensitive regions with `data-accesspilot-sensitive`.
 
 Approval is a random id bound to the exact normalized proposal and current page
 fingerprint. Only the trusted orchestrator supplies it after the user's approval.
-For native submit clicks, hover and focus changes during review are tolerated;
+For standard DOM controls, hover and focus changes are tolerated;
 approval still requires unchanged DOM, form values, control geometry, viewport,
-and scroll position. Other coordinate actions retain screenshot-based checks.
+and scroll position. Canvas and unknown visual targets retain screenshot-based checks.
 A different action cannot run while approval is pending. Wrong/stale approvals
 and changed pages fail. `denyApproval(id)` consumes the proposal without acting.
 Completed or attempted action ids cannot be executed twice. Use a fresh proposal

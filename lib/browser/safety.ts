@@ -113,7 +113,7 @@ export async function readSafetyState(page: Page, key: string) {
 }
 
 export interface TargetSafety {
-  nativeSubmit: boolean;
+  domTarget: boolean;
   sensitive: boolean;
   manual: boolean;
   editable: boolean;
@@ -163,7 +163,12 @@ export async function inspectTarget(page: Page, action: BrowserAction): Promise<
         );
       const activatingKey = proposal.type === "key" && ["Enter", "Space"].includes(proposal.key);
       return {
-        nativeSubmit: isSubmit,
+        domTarget:
+          editable ||
+          element instanceof HTMLInputElement ||
+          element instanceof HTMLSelectElement ||
+          element instanceof HTMLButtonElement ||
+          element instanceof HTMLAnchorElement,
         sensitive,
         manual: Boolean(element instanceof HTMLIFrameElement || input?.type === "file"),
         editable,

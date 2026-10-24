@@ -88,6 +88,56 @@ describe("browser controller", () => {
     }
   });
 
+  it("clicks a standard field after hover changes its pixels between observation and execution", async () => {
+    const controller = await create();
+    try {
+      await navigate(controller, "/scholarship");
+      await controller.page.addStyleTag({ content: "#email:hover{background:rgb(255,0,0)}" });
+      await controller.page.mouse.move(0, 0);
+      const action = await click(controller, "#email");
+      await controller.page.locator("#email").hover();
+      expect(await controller.execute(action)).toMatchObject({ status: "executed" });
+      expect(
+        await controller.execute({
+          id: id(),
+          type: "type",
+          text: "ada@example.test",
+          commits: false,
+        }),
+      ).toMatchObject({ status: "executed" });
+    } finally {
+      await controller.close();
+    }
+  });
+
+  it("still rejects a visually changed canvas target", async () => {
+    const controller = await create();
+    try {
+      await navigate(controller);
+      await controller.page.evaluate(() => {
+        const canvas = document.createElement("canvas");
+        canvas.id = "visual-control";
+        canvas.width = 120;
+        canvas.height = 50;
+        document.body.prepend(canvas);
+        canvas.getContext("2d")!.fillRect(0, 0, 120, 50);
+      });
+      const action = await click(controller, "#visual-control");
+      await controller.page.evaluate(() => {
+        const canvas = document.getElementById("visual-control") as HTMLCanvasElement;
+        const context = canvas.getContext("2d")!;
+        context.fillStyle = "red";
+        context.fillRect(0, 0, 120, 50);
+      });
+      expect(await controller.execute(action)).toMatchObject({
+        status: "failed",
+        error: { code: "stale_observation" },
+      });
+    } finally {
+      await controller.close();
+    }
+  });
+
   it("requires approval for a native submit even when commits is false; consumes approval once", async () => {
     const controller = await create();
     try {
@@ -196,6 +246,7 @@ describe("browser controller", () => {
         if (pending.status !== "approval_required") throw new Error("Missing approval");
         expect(pending).not.toHaveProperty("fingerprint");
         expect(pending).not.toHaveProperty("nativeSubmitFingerprint");
+        expect(pending).not.toHaveProperty("domFingerprint");
         const before = demo.submissions;
         await controller.page.evaluate((kind) => {
           if (kind === "field")
