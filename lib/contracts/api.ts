@@ -5,8 +5,24 @@ export const GOAL_MAX_LENGTH = 1000;
 
 const LOCALHOST_NAMES: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** Only `https:` URLs, plus `http:` on the local machine for the demo site, may be automated. */
+/** Whitespace, control, and invisible format characters (e.g. zero-width space, RTL override). */
+const HIDDEN_OR_SPACE = /[\s\p{Cc}\p{Cf}]/u;
+const HOST_LABEL = /^(?!-)[a-z0-9-]+(?<!-)$/;
+
+/** A public host: dot-separated ASCII labels (browsers convert Unicode names to punycode). */
+function isPlausibleHostname(hostname: string): boolean {
+  if (hostname.startsWith("[") && hostname.endsWith("]")) return true;
+  const labels = hostname.split(".");
+  return labels.length >= 2 && labels.every((label) => HOST_LABEL.test(label));
+}
+
+/**
+ * Only `https:` URLs, plus `http:` on the local machine for the demo site, may be automated.
+ * Addresses with spaces or invisible characters are rejected rather than silently "fixed", so
+ * the address the user sees is the one that gets opened.
+ */
 export function isAllowedTaskUrl(value: string): boolean {
+  if (HIDDEN_OR_SPACE.test(value)) return false;
   let url: URL;
   try {
     url = new URL(value);
@@ -14,8 +30,15 @@ export function isAllowedTaskUrl(value: string): boolean {
     return false;
   }
   if (url.username !== "" || url.password !== "") return false;
-  if (url.protocol === "https:") return url.hostname !== "";
+  if (url.protocol === "https:") {
+    return LOCALHOST_NAMES.has(url.hostname) || isPlausibleHostname(url.hostname);
+  }
   return url.protocol === "http:" && LOCALHOST_NAMES.has(url.hostname);
+}
+
+/** Text left after removing invisible format characters such as zero-width spaces. */
+function visibleText(value: string): string {
+  return value.replace(/\p{Cf}/gu, "").trim();
 }
 
 export const taskUrlSchema = z
@@ -29,8 +52,10 @@ export const taskUrlSchema = z
 export const goalSchema = z
   .string()
   .trim()
-  .min(1, { message: "Describe what you want to get done." })
-  .max(GOAL_MAX_LENGTH, { message: `Keep the goal under ${GOAL_MAX_LENGTH} characters.` });
+  .refine((goal) => visibleText(goal) !== "", { message: "Describe what you want to get done." })
+  .refine((goal) => goal.length <= GOAL_MAX_LENGTH, {
+    message: `Keep the goal under ${GOAL_MAX_LENGTH} characters.`,
+  });
 
 const idSchema = z.string().trim().min(1);
 

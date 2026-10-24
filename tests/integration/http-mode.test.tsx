@@ -174,6 +174,7 @@ describe("http mode against a contract-following backend", () => {
     );
     await advanceUntil(() => liveText("assertive").includes("no longer waiting for approval"));
     expect(approve).toHaveBeenCalled();
-    expect(screen.getByRole("dialog")).toBeVisible();
+    // The server said the question is closed, so the dialog must not ask it again.
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

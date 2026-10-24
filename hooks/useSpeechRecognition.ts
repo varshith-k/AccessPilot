@@ -64,7 +64,7 @@ export const RECOGNITION_ERROR_MESSAGES: Record<RecognitionErrorCode, string> = 
     "I didn't hear anything. Press the microphone button and try again, or type instead.",
   network:
     "Voice input needs an internet connection in this browser. Check your connection and try again, or type instead.",
-  aborted: "Listening was interrupted. Press the microphone button to try again.",
+  aborted: "Listening was interrupted. Press the microphone button (Alt+Shift+M) to try again.",
   "audio-capture": "No microphone was found. Connect a microphone and try again, or type instead.",
   unknown: "Voice input stopped because of a problem. Try again, or type instead.",
 };
@@ -90,6 +90,8 @@ export interface SpeechRecognitionOptions {
   onFinal(transcript: string): void;
   /** The user started talking: a good moment to silence built-in speech. */
   onSpeechStart?(): void;
+  /** Listening ended normally but no words were recognized. */
+  onNothingHeard?(): void;
   onListeningChange?(listening: boolean): void;
   onError?(error: RecognitionError): void;
 }
@@ -179,10 +181,13 @@ export function useSpeechRecognition(options: SpeechRecognitionOptions): SpeechR
       setInterim("");
       setListeningState(false);
       const heard = finalText.trim();
-      if (!discard && heard !== "") {
-        setTranscript(heard);
-        optionsRef.current.onFinal(heard);
+      if (discard) return;
+      if (heard === "") {
+        optionsRef.current.onNothingHeard?.();
+        return;
       }
+      setTranscript(heard);
+      optionsRef.current.onFinal(heard);
     };
 
     recognitionRef.current = recognition;

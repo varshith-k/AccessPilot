@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type RefObject, type SyntheticEvent } from "react";
 import type { PendingApproval } from "@/lib/client/taskState";
+import { StatusAnnouncer } from "./StatusAnnouncer";
 import { buttonStyles } from "./ui/styles";
 
 export interface ApprovalDialogProps {
@@ -13,6 +14,11 @@ export interface ApprovalDialogProps {
   returnFocusRef: RefObject<HTMLElement | null>;
   /** How to answer by voice, shown when voice input is available. */
   voiceHint?: string | undefined;
+  /**
+   * Microphone control inside the dialog. The page's own microphone button is unreachable while
+   * the modal is open, and voice-control users need something they can click.
+   */
+  voice?: { listening: boolean; error: string | null; onToggle(): void } | undefined;
 }
 
 /**
@@ -25,6 +31,7 @@ export function ApprovalDialog({
   onDeny,
   returnFocusRef,
   voiceHint,
+  voice,
 }: ApprovalDialogProps) {
   const id = useId();
   const headingId = `${id}-heading`;
@@ -68,6 +75,7 @@ export function ApprovalDialog({
     >
       {approval && (
         <div className="space-y-4 p-5">
+          <StatusAnnouncer local />
           <h2 ref={headingRef} id={headingId} tabIndex={-1} className="text-2xl font-bold">
             Approval needed: {approval.action}
           </h2>
@@ -96,6 +104,28 @@ export function ApprovalDialog({
               Approve and submit
             </button>
           </div>
+          {voice && (
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={voice.onToggle}
+                aria-pressed={voice.listening}
+                className={voice.listening ? buttonStyles.primary : buttonStyles.secondary}
+              >
+                <span aria-hidden="true">🎤</span>
+                Answer by voice
+              </button>
+              <p className="font-semibold">
+                {voice.listening ? "Listening… say “approve” or “don't submit”." : "Not listening"}
+              </p>
+              {voice.error && (
+                <p className="w-full font-semibold text-danger">
+                  <span aria-hidden="true">⚠ </span>
+                  {voice.error}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </dialog>

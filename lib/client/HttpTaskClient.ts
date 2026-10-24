@@ -44,6 +44,8 @@ const STATUS_MESSAGES: Record<number, string> = {
   409: "That action doesn't apply right now. The task may have moved on.",
   429: "AccessPilot is busy. Wait a moment, then try again.",
 };
+const SERVER_UNAVAILABLE_MESSAGE =
+  "AccessPilot's server isn't available right now, so the task couldn't start. Wait a moment, then try again.";
 const SERVER_ERROR_MESSAGE =
   "Something went wrong on the AccessPilot server. Try again in a moment.";
 const NETWORK_ERROR_MESSAGE =
@@ -83,7 +85,7 @@ export class HttpTaskClient implements TaskClient {
   }
 
   async start(input: StartTaskRequest): Promise<{ taskId: string }> {
-    const response = await this.request(apiPaths.tasks(), input);
+    const response = await this.request(apiPaths.tasks(), input, "start");
     let body: unknown;
     try {
       body = await response.json();
@@ -162,7 +164,9 @@ export class HttpTaskClient implements TaskClient {
         }
         const { event } = parsed;
         if (event.taskId !== taskId) return;
-        failedAttempts = 0;
+        // Only genuinely new events count as progress. A server that replays old events and
+        // drops the connection must still run out of reconnect attempts.
+        if (event.seq > lastSeq) failedAttempts = 0;
         lastSeq = Math.max(lastSeq, event.seq);
         onEvent(event);
         if (isTerminalEvent(event)) close();
@@ -191,7 +195,11 @@ export class HttpTaskClient implements TaskClient {
     return close;
   }
 
-  private async request(path: string, body: unknown): Promise<Response> {
+  private async request(
+    path: string,
+    body: unknown,
+    purpose: "start" | "action" = "action",
+  ): Promise<Response> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
@@ -202,11 +210,14 @@ export class HttpTaskClient implements TaskClient {
     } catch (cause) {
       throw new TaskClientError({ kind: "network", message: NETWORK_ERROR_MESSAGE, cause });
     }
-    if (!response.ok) throw await this.httpError(response);
+    if (!response.ok) throw await this.httpError(response, purpose);
     return response;
   }
 
-  private async httpError(response: Response): Promise<TaskClientError> {
+  private async httpError(
+    response: Response,
+    purpose: "start" | "action",
+  ): Promise<TaskClientError> {
     let code: string | undefined;
     let message: string | undefined;
     try {
@@ -224,6 +235,10 @@ export class HttpTaskClient implements TaskClient {
       ...(code === undefined ? {} : { code }),
       message:
         message ??
+        // Starting can't hit "no such task"; a 404 or gateway error means the API isn't there.
+        (purpose === "start" && [404, 405, 501, 502, 503, 504].includes(response.status)
+          ? SERVER_UNAVAILABLE_MESSAGE
+          : undefined) ??
         STATUS_MESSAGES[response.status] ??
         (response.status >= 500
           ? SERVER_ERROR_MESSAGE

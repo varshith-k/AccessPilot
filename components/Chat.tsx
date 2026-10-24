@@ -38,6 +38,7 @@ const TONE_CLASS: Record<LogTone, string> = {
 const STICK_THRESHOLD = 48;
 
 const FOLLOW_UP_ERRORS: Record<Exclude<FollowUpResult, { ok: true }>["reason"], string> = {
+  invalid: "That message can't be used as a goal.",
   empty: "Type a message first.",
   busy: "AccessPilot is working on a task. Wait for it to finish, or press Stop.",
   no_url: "Enter a website address in the task form above first, then start a task.",
@@ -93,7 +94,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
       setError(null);
       scrollToLatest();
     } else {
-      const message = FOLLOW_UP_ERRORS[result.reason];
+      const message = "message" in result ? result.message : FOLLOW_UP_ERRORS[result.reason];
       setError(message);
       announce(message, "assertive");
     }
@@ -110,7 +111,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
         tabIndex={0}
         role="region"
         aria-label="Conversation history"
-        className="max-h-[28rem] min-h-24 overflow-y-auto rounded-lg border border-border bg-bg p-3"
+        className="max-h-[min(28rem,60dvh)] min-h-24 overflow-y-auto rounded-lg border border-border bg-bg p-3"
       >
         {entries.length === 0 ? (
           <p className="text-muted">

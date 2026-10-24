@@ -1,5 +1,5 @@
 import { SHORTCUT_LABELS } from "@/hooks/useKeyboardShortcuts";
-import { buttonStyles } from "./ui/styles";
+import { buttonStyles, shortcutHint } from "./ui/styles";
 
 export interface StopButtonProps {
   onStop(): void;
@@ -17,7 +17,7 @@ export function StopButton({ onStop, stopping }: StopButtonProps) {
     >
       <span aria-hidden="true">■</span>
       {stopping ? "Stopping…" : "Stop"}{" "}
-      <span className="text-sm font-normal">({SHORTCUT_LABELS.stop})</span>
+      <span className={shortcutHint}>({SHORTCUT_LABELS.stop})</span>
     </button>
   );
 }

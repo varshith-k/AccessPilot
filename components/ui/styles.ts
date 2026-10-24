@@ -1,6 +1,9 @@
 /** Shared class names. Every button is at least 44px tall, well above the 24px minimum. */
 const buttonBase =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-md border-2 px-4 py-2 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-11 max-w-full flex-wrap items-center justify-center gap-x-2 rounded-md border-2 px-4 py-2 text-center text-base font-semibold break-words disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60";
+
+/** Keyboard shortcut hints are noise on touch screens; aria-keyshortcuts still exposes them. */
+export const shortcutHint = "text-sm font-normal [@media(pointer:coarse)]:hidden";
 
 export const buttonStyles = {
   primary: `${buttonBase} border-accent bg-accent text-on-accent hover:brightness-110`,

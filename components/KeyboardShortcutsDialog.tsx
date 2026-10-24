@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef } from "react";
 import { SHORTCUT_LABELS } from "@/hooks/useKeyboardShortcuts";
+import { StatusAnnouncer } from "./StatusAnnouncer";
 import { buttonStyles } from "./ui/styles";
 
 export interface KeyboardShortcutsDialogProps {
@@ -56,6 +57,7 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
     >
       {open && (
         <div className="space-y-4 p-5">
+          <StatusAnnouncer local />
           <h2 ref={headingRef} id={`${id}-heading`} tabIndex={-1} className="text-2xl font-bold">
             Keyboard shortcuts
           </h2>

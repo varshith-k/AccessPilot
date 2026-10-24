@@ -29,13 +29,15 @@ export function HandoffPanel({ handoff, onContinue, onStop }: HandoffPanelProps)
 
   return (
     <section className={`${panelStyles} space-y-3 border-2 border-warning`}>
-      <h3 ref={headingRef} id={`${id}-heading`} tabIndex={-1} className="text-lg font-bold">
+      <h2 ref={headingRef} id={`${id}-heading`} tabIndex={-1} className="text-xl font-bold">
         Your turn
-      </h3>
+      </h2>
       <p>{REASON_TEXT[handoff.reason]}</p>
       <p className="font-semibold">{handoff.instructions}</p>
       <p className="text-sm text-muted">
-        AccessPilot is waiting and will not do anything until you press Continue.
+        The browser window is the separate window AccessPilot opened for this task. Switch to it
+        with Alt+Tab (Command+Tab on a Mac), finish the step there, then come back. AccessPilot is
+        waiting and will not do anything until you press Continue or say “continue”.
       </p>
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={onContinue} className={buttonStyles.primary}>

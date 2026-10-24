@@ -121,7 +121,8 @@ export function TaskForm({
           What do you want to get done?
         </label>
         <p id={ids.goalHint} className="text-sm text-muted">
-          For example: Help me complete this scholarship application.
+          For example: Help me complete this scholarship application. Press Enter to start, or
+          Shift+Enter for a new line.
         </p>
         <textarea
           ref={goalRef}
@@ -130,6 +131,12 @@ export function TaskForm({
           rows={3}
           value={goal}
           onChange={(event) => onGoalChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           aria-invalid={errors.goal ? true : undefined}
           aria-describedby={describedBy(ids.goalHint, Boolean(errors.goal) && ids.goalError)}
           className={inputStyles}

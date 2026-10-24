@@ -69,21 +69,51 @@ body {
     Roboto,
     sans-serif;
   line-height: 1.5;
+  /* With very large text, break long words instead of scrolling sideways (WCAG reflow). */
+  overflow-wrap: anywhere;
 }
 
 /*
- * While a task runs the status bar sticks to the top on viewports tall enough for it (not at
- * high zoom). Keep focused elements from scrolling underneath it.
+ * While a task runs, the status bar sticks to the top when it fits in under 30% of the screen
+ * (see useStickyFits). Keep focused elements from scrolling underneath it.
  */
-@media (min-height: 36rem) {
-  html[data-task-active] {
-    scroll-padding-top: 11rem;
-  }
+html[data-task-active] {
+  scroll-padding-top: 32vh;
 }
 
 :focus-visible {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
+}
+
+progress {
+  appearance: none;
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+progress::-webkit-progress-bar {
+  background: var(--color-surface);
+}
+progress::-webkit-progress-value {
+  background: var(--color-accent);
+}
+progress::-moz-progress-bar {
+  background: var(--color-accent);
+}
+
+@media (forced-colors: active) {
+  progress {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  progress::-webkit-progress-value {
+    background: Highlight;
+  }
+  progress::-moz-progress-bar {
+    background: Highlight;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

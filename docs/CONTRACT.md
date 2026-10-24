@@ -51,6 +51,24 @@ All bodies are JSON (`Content-Type: application/json`). Task ids in paths are UR
 - `approve` or `deny` with a stale or unknown `approvalId` returns `409 invalid_state` or
   `404 approval_not_found`. It must never act on a different pending approval.
 
+### How the frontend reacts to failed actions
+
+The status code decides what the user sees, so please use these consistently:
+
+| Response to `approve` / `deny` / `resume` | Frontend behavior                                                                                                           |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `409`                                     | The question is closed on the server. The dialog or hand-off is **not** shown again; the UI waits for your next event.      |
+| `404`                                     | The task is gone. The task ends in the UI as failed, so the user is never stuck answering a question nobody is waiting for. |
+| Network error or `5xx`                    | Temporary. The dialog or hand-off comes back so the user can answer again.                                                  |
+
+| Response to `stop` | Frontend behavior                                                                                                                                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `204`              | Stopped.                                                                                                                                                                             |
+| Anything else      | The UI still shows the task as stopped (the user asked to stop and must not be trapped) and warns that the server may not have stopped. Please make `/stop` as reliable as possible. |
+
+A `404`, `405`, or `502`–`504` on `POST /api/tasks` is shown as "AccessPilot's server isn't
+available right now", not as a missing task.
+
 ## Error responses
 
 > **Added by the frontend; see the changelog.**
@@ -190,6 +208,7 @@ stateDiagram-v2
     idle --> starting: POST /api/tasks
     starting --> planning: task.started
     planning --> running: page.map / step.started
+    planning --> awaiting_approval: approval.required
     running --> awaiting_approval: approval.required
     awaiting_approval --> running: approve / deny
     running --> awaiting_user: user_input.required
@@ -225,13 +244,16 @@ The UI enforces its side, but these are backend guarantees:
 
 Changes the frontend made to the original spec, with reasons:
 
-| Date       | Change                                                                                                            | Rationale                                                                                                                                  |
-| ---------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2026-10-24 | Added optional `totalSteps` to `step.started`.                                                                    | The progress UI needs "Step 3 of about 6" and a `<progress>` bar. Optional, so the backend can omit it when it doesn't know.               |
-| 2026-10-24 | Defined the error body `{ error: { code, message } }` for non-2xx responses.                                      | Lets the client raise typed errors and show a helpful message instead of a bare status code.                                               |
-| 2026-10-24 | Defined SSE framing: one JSON `data:` line, `id:` = `seq`, no `event:` name, close after a terminal event.        | Makes `Last-Event-ID` reconnect work and keeps server and client parsing identical.                                                        |
-| 2026-10-24 | `url` must be `https:`, or `http:` on localhost / 127.0.0.1 / [::1], with no embedded credentials.                | Same rule in the form and the API (`taskUrlSchema`), so the user gets the error before a round trip. Loopback IPs added for the demo site. |
-| 2026-10-24 | `goal` limited to 1000 characters. `deny.reason` limited to 500.                                                  | Bounds what reaches the model prompt.                                                                                                      |
-| 2026-10-24 | Text fields must be non-empty after trimming. `screenshot.step` may be 0. `imageDataUrl` must have a base64 body. | Empty narration or alt text is useless to a screen reader user. Step 0 covers the initial page screenshot.                                 |
-| 2026-10-24 | Unknown fields are stripped, not rejected.                                                                        | Lets the backend add fields without coordinating a frontend release.                                                                       |
-| 2026-10-24 | Reconnects send `?lastEventId=<seq>` on the events URL.                                                           | The client controls its own backoff, so it opens a new `EventSource`, and a new one can't send the `Last-Event-ID` header.                 |
+| Date       | Change                                                                                                                                                              | Rationale                                                                                                                                                                   |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-24 | Added optional `totalSteps` to `step.started`.                                                                                                                      | The progress UI needs "Step 3 of about 6" and a `<progress>` bar. Optional, so the backend can omit it when it doesn't know.                                                |
+| 2026-10-24 | Defined the error body `{ error: { code, message } }` for non-2xx responses.                                                                                        | Lets the client raise typed errors and show a helpful message instead of a bare status code.                                                                                |
+| 2026-10-24 | Defined SSE framing: one JSON `data:` line, `id:` = `seq`, no `event:` name, close after a terminal event.                                                          | Makes `Last-Event-ID` reconnect work and keeps server and client parsing identical.                                                                                         |
+| 2026-10-24 | `url` must be `https:`, or `http:` on localhost / 127.0.0.1 / [::1], with no embedded credentials.                                                                  | Same rule in the form and the API (`taskUrlSchema`), so the user gets the error before a round trip. Loopback IPs added for the demo site.                                  |
+| 2026-10-24 | `goal` limited to 1000 characters. `deny.reason` limited to 500.                                                                                                    | Bounds what reaches the model prompt.                                                                                                                                       |
+| 2026-10-24 | Text fields must be non-empty after trimming. `screenshot.step` may be 0. `imageDataUrl` must have a base64 body.                                                   | Empty narration or alt text is useless to a screen reader user. Step 0 covers the initial page screenshot.                                                                  |
+| 2026-10-24 | Unknown fields are stripped, not rejected.                                                                                                                          | Lets the backend add fields without coordinating a frontend release.                                                                                                        |
+| 2026-10-24 | Reconnects send `?lastEventId=<seq>` on the events URL.                                                                                                             | The client controls its own backoff, so it opens a new `EventSource`, and a new one can't send the `Last-Event-ID` header.                                                  |
+| 2026-10-24 | `approval.required` is accepted before any `page.map` or `step.started`.                                                                                            | A safety-critical question must never be dropped silently because it arrived early.                                                                                         |
+| 2026-10-24 | `url` rejects whitespace, zero-width and other invisible characters, `%` in the host, and hosts without a dot (except localhost). `goal` must contain visible text. | User testing found addresses that browsers silently rewrote (`https://exa<U+200B>mple.com` became `example.com`), so the opened address differed from the one the user saw. |
+| 2026-10-24 | Defined how failed `approve`/`deny`/`resume`/`stop` and a failed start are handled (see "How the frontend reacts to failed actions").                               | User testing with a backend returning 404s left users trapped in the approval dialog.                                                                                       |

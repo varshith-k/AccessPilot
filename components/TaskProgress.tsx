@@ -62,7 +62,7 @@ export function TaskProgress({ steps, totalSteps, stillWorking }: TaskProgressPr
             id="task-progress"
             max={totalSteps}
             value={Math.min(done, totalSteps)}
-            className="h-3 w-full accent-[var(--color-accent)]"
+            className="h-3 w-full"
           />
         </div>
       )}

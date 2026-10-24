@@ -3,7 +3,7 @@
 import { useId } from "react";
 import type { RecognitionError } from "@/hooks/useSpeechRecognition";
 import { SHORTCUT_LABELS } from "@/hooks/useKeyboardShortcuts";
-import { buttonStyles } from "./ui/styles";
+import { buttonStyles, shortcutHint } from "./ui/styles";
 
 export interface VoiceControlProps {
   supported: boolean;
@@ -49,7 +49,7 @@ export function VoiceControl({
           className={`${listening ? buttonStyles.primary : buttonStyles.secondary} min-h-12 min-w-12`}
         >
           <span aria-hidden="true">🎤</span>
-          Microphone <span className="text-sm font-normal">({SHORTCUT_LABELS.mic})</span>
+          Microphone <span className={shortcutHint}>({SHORTCUT_LABELS.mic})</span>
         </button>
         <p className="font-semibold">
           {listening ? (

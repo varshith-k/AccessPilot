@@ -31,7 +31,7 @@ export function describeStep(step: number, totalSteps: number | null, descriptio
 export function announcementFor(event: TaskEvent, totalSteps: number | null): Announcement | null {
   switch (event.type) {
     case "task.started":
-      return { text: "Starting. Looking at the page.", priority: "polite", speak: true };
+      return { text: "Looking at the page.", priority: "polite", speak: true };
     case "page.map":
       return { text: `${event.title}. ${event.summary}`, priority: "polite", speak: true };
     case "step.started":
@@ -62,9 +62,10 @@ export function announcementFor(event: TaskEvent, totalSteps: number | null): An
       return { text: event.summary, priority: "assertive", speak: true };
     case "task.failed":
       return {
-        text: event.recoverable
-          ? `Task failed. ${event.message} You can try again.`
-          : `Task failed. ${event.message}`,
+        text:
+          event.recoverable && !/\btry again\b/i.test(event.message)
+            ? `Task failed. ${event.message} You can try again.`
+            : `Task failed. ${event.message}`,
         priority: "assertive",
         speak: true,
       };

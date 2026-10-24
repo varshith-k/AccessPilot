@@ -1,9 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { NarrationPriority, StartTaskRequest, TaskEvent } from "@/lib/contracts";
+import {
+  goalSchema,
+  taskUrlSchema,
+  type NarrationPriority,
+  type StartTaskRequest,
+  type TaskEvent,
+} from "@/lib/contracts";
 import { announcementFor } from "@/lib/client/announcements";
-import { isTaskClientError, userMessageFor } from "@/lib/client/errors";
+import {
+  actionFailureFor,
+  isRetryable,
+  isTaskClientError,
+  userMessageFor,
+} from "@/lib/client/errors";
 import {
   initialTaskState,
   isActiveStatus,
@@ -29,7 +40,10 @@ export interface UseTaskSessionOptions {
   now?: () => Date;
 }
 
-export type FollowUpResult = { ok: true } | { ok: false; reason: "empty" | "busy" | "no_url" };
+export type FollowUpResult =
+  | { ok: true }
+  | { ok: false; reason: "empty" | "busy" | "no_url" }
+  | { ok: false; reason: "invalid"; message: string };
 
 export interface TaskSession {
   state: TaskState;
@@ -40,16 +54,60 @@ export interface TaskSession {
   stop(): Promise<void>;
   retry(): Promise<void>;
   reset(): void;
-  /** Sends a typed or spoken follow-up. Starts a new task with the same URL when nothing is running. */
-  sendFollowUp(text: string): FollowUpResult;
+  /**
+   * Sends a typed or spoken follow-up. When nothing is running it starts a new task with the
+   * last task's URL, or with `fallbackUrl` (the form's address) if there was no task yet.
+   */
+  sendFollowUp(text: string, fallbackUrl?: string): FollowUpResult;
   dismissWarning(id: string): void;
-  /** Re-reads the most recent narration; returns false when there is nothing to repeat. */
-  repeatLastNarration(): boolean;
+  /**
+   * Re-reads what matters most right now: the open approval question, the hand-off
+   * instructions, the outcome, or the error; otherwise the latest narration or page map.
+   * Returns false when there is nothing to repeat.
+   */
+  repeatLast(): boolean;
   /** Re-reads the page map; returns false when there is none yet. */
   describePage(): boolean;
 }
 
 const noop = () => undefined;
+
+export const STOP_UNCONFIRMED_TEXT =
+  "Stopped here, but AccessPilot couldn't reach its server to confirm. If the browser window is still doing something, close it.";
+export const TASK_GONE_TEXT =
+  "AccessPilot's server no longer has this task, so it can't continue. Nothing more will happen. Start the task again if you still need it.";
+
+/** What "repeat" should say: the thing the user most needs to hear again in this state. */
+export function mostImportantMessage(state: TaskState): string | null {
+  switch (state.status) {
+    case "awaiting_approval":
+      if (state.approval) {
+        const fields = state.approval.fields
+          .map((field) => `${field.label}: ${field.value === "" ? "empty" : field.value}.`)
+          .join(" ");
+        return `Approval needed. ${state.approval.summary} ${fields} Nothing happens until you choose.`.replace(
+          /\s+/g,
+          " ",
+        );
+      }
+      break;
+    case "awaiting_user":
+      if (state.handoff) return `Your turn. ${state.handoff.instructions}`;
+      break;
+    case "completed":
+      if (state.outcome) return state.outcome;
+      break;
+    case "failed":
+      if (state.error) return state.error.message;
+      break;
+    case "stopped":
+      return state.stoppedBy === "system" ? "AccessPilot stopped the task." : STOPPED_BY_USER_TEXT;
+    default:
+      break;
+  }
+  if (state.lastNarration !== null) return state.lastNarration;
+  return state.pageMap ? `${state.pageMap.title}. ${state.pageMap.summary}` : null;
+}
 
 export function useTaskSession({ client, effects, now }: UseTaskSessionOptions): TaskSession {
   const [state, setState] = useState<TaskState>(initialTaskState);
@@ -136,12 +194,9 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
         const result = dispatch({ type: "ui/stop_succeeded", at: timestamp() });
         if (result.ignored === null) tell(STOPPED_BY_USER_TEXT, "assertive", true);
       } catch (error) {
-        const message = userMessageFor(
-          error,
-          "AccessPilot couldn't confirm the stop. Press Stop again.",
-        );
-        dispatch({ type: "ui/stop_failed", message, at: timestamp() });
-        tell(message, "assertive", true);
+        const message = STOP_UNCONFIRMED_TEXT;
+        const failed = dispatch({ type: "ui/stop_failed", message, at: timestamp() });
+        if (failed.ignored === null) tell(message, "assertive", true);
       }
     },
     [client, dispatch, tell, timestamp],
@@ -160,7 +215,12 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
         if (stopRequestedRef.current) await sendStop(newTaskId);
       } catch (error) {
         const message = userMessageFor(error, "AccessPilot couldn't start the task. Try again.");
-        const failed = dispatch({ type: "ui/start_failed", message, at: timestamp() });
+        const failed = dispatch({
+          type: "ui/start_failed",
+          message,
+          at: timestamp(),
+          recoverable: isRetryable(error),
+        });
         if (failed.ignored === null) tell(message, "assertive", true);
       }
     },
@@ -183,7 +243,13 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
           error,
           "AccessPilot couldn't send your answer. Please choose again.",
         );
-        const failed = dispatch({ type: "ui/decision_failed", message, at: timestamp() });
+        const failure = actionFailureFor(error);
+        const failed = dispatch({
+          type: "ui/decision_failed",
+          message: failure === "gone" ? TASK_GONE_TEXT : message,
+          at: timestamp(),
+          failure,
+        });
         if (failed.ignored === null) tell(message, "assertive", true);
       }
     },
@@ -204,7 +270,13 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
       dispatch({ type: "ui/resume_succeeded" });
     } catch (error) {
       const message = userMessageFor(error, "AccessPilot couldn't continue. Press Continue again.");
-      const failed = dispatch({ type: "ui/resume_failed", message, at: timestamp() });
+      const failure = actionFailureFor(error);
+      const failed = dispatch({
+        type: "ui/resume_failed",
+        message: failure === "gone" ? TASK_GONE_TEXT : message,
+        at: timestamp(),
+        failure,
+      });
       if (failed.ignored === null) tell(message, "assertive", true);
     }
   }, [client, dispatch, tell, timestamp]);
@@ -235,13 +307,21 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
   }, [dispatch]);
 
   const sendFollowUp = useCallback(
-    (text: string): FollowUpResult => {
-      const goal = text.trim();
-      if (goal === "") return { ok: false, reason: "empty" };
+    (text: string, fallbackUrl?: string): FollowUpResult => {
+      if (text.trim() === "") return { ok: false, reason: "empty" };
       const { status: current, request } = stateRef.current;
       if (isActiveStatus(current)) return { ok: false, reason: "busy" };
-      if (request === null) return { ok: false, reason: "no_url" };
-      void start({ url: request.url, goal });
+      const goal = goalSchema.safeParse(text);
+      if (!goal.success) {
+        return {
+          ok: false,
+          reason: "invalid",
+          message: goal.error.issues[0]?.message ?? "That message can't be used as a goal.",
+        };
+      }
+      const url = request?.url ?? taskUrlSchema.safeParse(fallbackUrl ?? "").data;
+      if (url === undefined) return { ok: false, reason: "no_url" };
+      void start({ url, goal: goal.data });
       return { ok: true };
     },
     [start],
@@ -254,8 +334,8 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
     [dispatch],
   );
 
-  const repeatLastNarration = useCallback(() => {
-    const text = stateRef.current.lastNarration;
+  const repeatLast = useCallback(() => {
+    const text = mostImportantMessage(stateRef.current);
     if (text === null) return false;
     tell(text, "polite", true);
     return true;
@@ -280,7 +360,7 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
       reset,
       sendFollowUp,
       dismissWarning,
-      repeatLastNarration,
+      repeatLast,
       describePage,
     }),
     [
@@ -294,7 +374,7 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
       reset,
       sendFollowUp,
       dismissWarning,
-      repeatLastNarration,
+      repeatLast,
       describePage,
     ],
   );

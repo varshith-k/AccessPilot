@@ -6,3 +6,4 @@ test-results/
 package-lock.json
 next-env.d.ts
 accesspilot-frontend-prompt.md
+.usertest/
