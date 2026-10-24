@@ -2,6 +2,7 @@
 node_modules/
 .env
 .env.*
+!.env.example
 __pycache__/
 *.pyc
 dist/
@@ -17,3 +18,41 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+
+# AI coding assistant files (local only)
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
+.claude/
+.cursor/
+.cursorrules
+.codex/
+.windsurfrules
+.aider*
+accesspilot-frontend-prompt.md
+
+# Logs and caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.cache/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+
+# Keys, certificates, and deploy state
+*.pem
+*.key
+*.p12
+.vercel/
+
+# Playwright login state and agent run artifacts
+playwright/.auth/
+playwright/.cache/
