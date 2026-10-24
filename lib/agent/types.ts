@@ -93,6 +93,8 @@ export interface BrowserDriver {
   open(url: string, signal?: AbortSignal): Promise<Observation>;
   observe(): Promise<Observation>;
   execute: ExecuteBrowserAction;
+  /** Cancels whatever the browser is doing right now and refuses further work. Safe to call at any time. */
+  stop?(): Promise<void>;
   close(): Promise<void>;
 }
 

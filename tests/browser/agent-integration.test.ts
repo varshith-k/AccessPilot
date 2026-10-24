@@ -105,6 +105,17 @@ describe("orchestrator + real Chromium + demo site", () => {
     expect(JSON.stringify(r.task.events)).not.toContain("hunter2");
   });
 
+  it("Stop interrupts a page that never finishes loading, quickly, and submits nothing", async () => {
+    const r = run("/slow"); // the demo site never answers this route
+    await new Promise((resolve) => setTimeout(resolve, 800)); // Chromium is up and waiting on the page
+    const started = Date.now();
+    r.store.stop(r.task.id);
+    await r.finished;
+    expect(Date.now() - started).toBeLessThan(5_000); // not the 30 s navigation timeout
+    expect(r.last()).toMatchObject({ type: "task.stopped", by: "user" });
+    expect(site.submissions).toBe(0);
+  });
+
   it("fails clearly when the page has no such control", async () => {
     const r = run("/scholarship", [{ click: "Nonexistent control" }]);
     await r.finished;

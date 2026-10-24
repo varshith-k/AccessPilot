@@ -17,6 +17,7 @@ export function createRealBrowserFactory(
 ): () => Promise<BrowserDriver> {
   return async () => {
     let controller: BrowserController | undefined;
+    let stopped = false;
     const current = () => {
       if (!controller) throw new Error("Browser not opened");
       return controller;
@@ -28,6 +29,11 @@ export function createRealBrowserFactory(
           allowedOrigins: [new URL(url).origin],
           headless: !options.headed,
         });
+        if (stopped) {
+          // Stop arrived while Chromium was starting.
+          await controller.stop();
+          throw new Error("Cancelled");
+        }
         const result = await controller.execute(
           { id: `open_${randomUUID()}`, type: "navigate", url, commits: false },
           { signal },
@@ -49,6 +55,10 @@ export function createRealBrowserFactory(
       },
       observe: () => current().observe(),
       execute: (action, executeOptions) => current().execute(action, executeOptions),
+      stop: async () => {
+        stopped = true;
+        await controller?.stop();
+      },
       close: async () => {
         await controller?.close();
       },

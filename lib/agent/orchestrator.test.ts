@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isTerminalEvent, taskEventSchema } from "@/lib/contracts";
+import { isTerminalEvent, taskEventSchema, type ActionResult } from "@/lib/contracts";
 import { act, click, done, makeDeps, start, typeText } from "./testkit";
 
 describe("happy path", () => {
@@ -169,6 +169,36 @@ describe("stop", () => {
     await run.finished;
     expect(execute).not.toHaveBeenCalled();
     expect(run.last()).toMatchObject({ type: "task.stopped", by: "user" });
+  });
+
+  it("tells the browser to stop at once, while an action is still in flight", async () => {
+    let finishAction!: () => void;
+    const stop = vi.fn(async () => {});
+    const { deps } = makeDeps(
+      [act(click("a", 1, 1, "Slow thing")), done()],
+      {},
+      {
+        execute: vi.fn(
+          (a) =>
+            new Promise((resolve) => {
+              finishAction = () =>
+                resolve({
+                  actionId: a.id,
+                  status: "executed" as const,
+                  verification: "passed" as const,
+                });
+            }),
+        ),
+        stop,
+      },
+    );
+    const run = start(deps);
+    await vi.waitFor(() => expect(finishAction).toBeTypeOf("function"));
+    run.store.stop(run.task.id);
+    expect(stop).toHaveBeenCalledTimes(1); // before the action finished and before cleanup
+    await run.finished;
+    expect(run.last()).toMatchObject({ type: "task.stopped", by: "user" });
+    finishAction();
   });
 
   it("is idempotent and a stop after the end is harmless", async () => {

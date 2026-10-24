@@ -188,6 +188,10 @@ export async function runTask(
     ctl.emit({ type: "task.started", url: input.url, goal: input.goal });
 
     browser = await guard(deps.createBrowser());
+    // Stop must reach the browser at once, not wait for cleanup: it interrupts a page that is still
+    // loading and any action in flight.
+    const driver = browser;
+    signal.addEventListener("abort", () => void driver.stop?.().catch(() => {}), { once: true });
     let obs = await guard(browser.open(input.url, signal));
     sendScreenshot(0, obs, "Before any steps");
 
