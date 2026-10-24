@@ -21,6 +21,7 @@ import { BrowserPreview } from "./BrowserPreview";
 import { Chat } from "./Chat";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { HandoffPanel } from "./HandoffPanel";
+import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { FirstRunSpeechPrompt, SettingsPanel } from "./SettingsPanel";
 import { StatusAnnouncer } from "./StatusAnnouncer";
 import { StopButton } from "./StopButton";
@@ -36,6 +37,8 @@ export interface AccessPilotAppProps {
 }
 
 export function AccessPilotApp({ client }: AccessPilotAppProps) {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const showHelp = useCallback(() => setHelpOpen(true), []);
   return (
     <AnnouncerProvider>
       <a
@@ -45,16 +48,26 @@ export function AccessPilotApp({ client }: AccessPilotAppProps) {
         Skip to main content
       </a>
       <header className="border-b border-border px-4 py-4">
-        <div className="mx-auto max-w-7xl">
-          <h1 className="text-3xl font-bold">AccessPilot</h1>
-          <p className="text-muted">
-            Tell me a website and a goal. I&apos;ll do the steps, tell you what I&apos;m doing, and
-            ask before anything important.
-          </p>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 basis-64">
+            <h1 className="text-3xl font-bold">AccessPilot</h1>
+            <p className="text-muted">
+              Tell me a website and a goal. I&apos;ll do the steps, tell you what I&apos;m doing,
+              and ask before anything important.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={showHelp}
+            aria-keyshortcuts="?"
+            className={buttonStyles.secondary}
+          >
+            Keyboard shortcuts <span className="text-sm font-normal">(?)</span>
+          </button>
         </div>
       </header>
       <ErrorBoundary>
-        <TaskWorkspace client={client} />
+        <TaskWorkspace client={client} onShowHelp={showHelp} />
       </ErrorBoundary>
       <footer className="border-t border-border px-4 py-4 text-sm text-muted">
         <div className="mx-auto max-w-7xl">
@@ -62,12 +75,18 @@ export function AccessPilotApp({ client }: AccessPilotAppProps) {
           approval.
         </div>
       </footer>
+      <KeyboardShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
       <StatusAnnouncer />
     </AnnouncerProvider>
   );
 }
 
-function TaskWorkspace({ client: injected }: { client?: TaskClient }) {
+interface TaskWorkspaceProps {
+  client?: TaskClient | undefined;
+  onShowHelp(): void;
+}
+
+function TaskWorkspace({ client: injected, onShowHelp }: TaskWorkspaceProps) {
   const [client] = useState<TaskClient>(() => injected ?? createTaskClientFromEnvironment());
   const { announce } = useAnnouncer();
   const [settings, updateSettings] = useSettings();
@@ -196,6 +215,14 @@ function TaskWorkspace({ client: injected }: { client?: TaskClient }) {
     { code: "KeyS", alt: true, shift: true, allowInTextFields: true, handler: stop },
     { code: "KeyM", alt: true, shift: true, handler: toggleMic },
     { code: "KeyR", alt: true, shift: true, handler: repeat },
+    {
+      code: "Slash",
+      key: "?",
+      // Never stack a second dialog on top of an approval question.
+      handler: () => {
+        if (state.approval === null) onShowHelp();
+      },
+    },
   ]);
 
   const chooseSpeechMode = (screenReaderMode: boolean) => {
