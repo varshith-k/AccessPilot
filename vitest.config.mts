@@ -13,12 +13,19 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./tests/setup.ts"],
-    include: ["tests/unit/**/*.test.{ts,tsx}", "tests/integration/**/*.test.{ts,tsx}"],
+    include: [
+      "tests/unit/**/*.test.{ts,tsx}",
+      "tests/integration/**/*.test.{ts,tsx}",
+      "lib/agent/**/*.test.ts",
+      "app/api/**/*.test.ts",
+      "demo-site/**/*.test.ts",
+      "lib/ai/**/*.test.ts",
+    ],
     restoreMocks: true,
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "text", "html"],
-      include: ["lib/client/**", "lib/contracts/**", "hooks/**", "components/**"],
+      include: ["lib/client/**", "lib/contracts/**", "lib/twinly/**", "hooks/**", "components/**"],
       thresholds: {
         lines: 85,
       },

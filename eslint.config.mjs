@@ -30,6 +30,7 @@ const config = [
   {
     ignores: [
       ".next/**",
+      ".cache/**",
       "node_modules/**",
       "coverage/**",
       "playwright-report/**",

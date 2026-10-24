@@ -21,6 +21,8 @@ describe("session startup failure cleanup", () => {
       close: mocks.contextClose,
       setDefaultTimeout: vi.fn(),
       setDefaultNavigationTimeout: vi.fn(),
+      route: vi.fn(),
+      routeWebSocket: vi.fn(),
     });
   });
 

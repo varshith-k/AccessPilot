@@ -212,6 +212,39 @@ AccessPilot targets **WCAG 2.2 AA**:
 - Mock screenshots are simple wireframes, not real pages.
 - Stop is instant in the UI, but halting the real browser depends on the backend honoring `/stop`.
 
+---
+
+## Browser automation module
+
+Person 4's Playwright controller supports permitted navigation, screenshots, DOM
+context, structured action execution, explicit approval, stop/cancellation, and
+outcome verification. See [the integration contract](docs/BROWSER.md).
+
+```sh
+npm ci
+npx playwright install chromium
+npm run test:browser
+npm run demo:browser
+```
+
+The demo uses a local scholarship site and mocked Twinly proposals. It requires
+an explicit `yes` before submission. See [the demo guide](docs/BROWSER-DEMO.md).
+
+## Agent backend
+
+The API routes and orchestrator connect the UI to Gemma, Twinly and the browser controller. They
+also run on scripted stand-ins, so the whole flow works without any other module. See
+[docs/AGENT.md](docs/AGENT.md).
+
+```sh
+# UI + API, real Gemma planning, real Chromium, against the local demo form
+ACCESSPILOT_AGENT=fake ACCESSPILOT_PLANNER=gemma ACCESSPILOT_BROWSER=real \
+  NEXT_PUBLIC_TASK_CLIENT=http npm run dev
+npm run demo-site   # http://localhost:4000/scholarship
+```
+
+Put `GEMINI_API_KEY` in `.env.local` (see `.env.example`).
+
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and our
@@ -219,7 +252,11 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and our
 
 ## Team
 
-<!-- TODO: team members -->
+- Varshith Kaki
+- Harshini Sangem
+- Bhoomika Mudi
+- Jyothi Nandhan Repaka
+- Megha Suhanth
 
 ## License
 

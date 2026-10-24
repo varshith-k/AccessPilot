@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>STEM Futures Scholarship</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font:
+          18px/1.5 system-ui,
+          sans-serif;
+        margin: 0;
+        background: #f4f6fb;
+        color: #14213d;
+      }
+      main {
+        max-width: 42rem;
+        margin: 2rem auto;
+        padding: 0 1rem 3rem;
+      }
+      h1 {
+        margin-bottom: 0.25rem;
+      }
+      .deadline {
+        color: #5a3e00;
+        background: #fff2cc;
+        display: inline-block;
+        padding: 0.15rem 0.6rem;
+        border-radius: 0.4rem;
+      }
+      form {
+        background: #fff;
+        border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        margin-top: 1.5rem;
+        box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-top: 1rem;
+      }
+      .hint {
+        font-weight: 400;
+        color: #4a5568;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+        padding: 0.55rem 0.7rem;
+        margin-top: 0.3rem;
+        border: 2px solid #8a94a6;
+        border-radius: 0.4rem;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus,
+      button:focus-visible {
+        outline: 3px solid #1d4ed8;
+        outline-offset: 2px;
+      }
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+      }
+      button {
+        font: inherit;
+        font-weight: 700;
+        padding: 0.7rem 1.2rem;
+        border-radius: 0.5rem;
+        border: 2px solid #1d4ed8;
+        cursor: pointer;
+      }
+      .primary {
+        background: #1d4ed8;
+        color: #fff;
+      }
+      .secondary {
+        background: #fff;
+        color: #1d4ed8;
+      }
+      .error {
+        color: #9b1c1c;
+        font-weight: 600;
+        margin-top: 0.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>STEM Futures Scholarship</h1>
+      <p class="deadline">Deadline: December 1</p>
+      <p>
+        Open to students starting a computer science, engineering or mathematics program. Fields
+        marked required must be completed.
+      </p>
+
+      <form id="apply" method="post" action="/submit" novalidate>
+        <label for="name">Full name <span class="hint">(required)</span></label>
+        <input id="name" name="name" autocomplete="name" required />
+
+        <label for="email">Email <span class="hint">(required)</span></label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+
+        <label for="program">Program <span class="hint">(required)</span></label>
+        <input
+          id="program"
+          name="program"
+          placeholder="e.g. Computer Science"
+          autocomplete="off"
+          required
+        />
+
+        <label for="start">Start date</label>
+        <input id="start" name="start" placeholder="YYYY-MM-DD" autocomplete="off" />
+
+        <label for="essay"
+          >Why do you deserve this scholarship? <span class="hint">(up to 500 words)</span></label
+        >
+        <textarea id="essay" name="essay" rows="6"></textarea>
+
+        <p id="problem" class="error" role="alert" hidden></p>
+        <div class="actions">
+          <button type="button" class="secondary" id="save">Save draft</button>
+          <button type="submit" class="primary" id="submit">Submit application</button>
+        </div>
+      </form>
+    </main>
+    <script>
+      const form = document.getElementById("apply");
+      const problem = document.getElementById("problem");
+      form.addEventListener("submit", (event) => {
+        const missing = ["name", "email", "program"].filter(
+          (id) => !form.elements[id].value.trim(),
+        );
+        if (missing.length === 0) return;
+        event.preventDefault();
+        problem.textContent = `Please fill in: ${missing.join(", ")}.`;
+        problem.hidden = false;
+        form.elements[missing[0]].focus();
+      });
+      document.getElementById("save").addEventListener("click", () => {
+        problem.textContent = "Draft saved on this page only.";
+        problem.hidden = false;
+      });
+    </script>
+  </body>
+</html>
