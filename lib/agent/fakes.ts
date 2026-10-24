@@ -121,7 +121,14 @@ export function createFakeDeps(options: FakeOptions = {}): AgentDeps {
   return {
     planner,
     actions,
-    userDetails: { name: "Alex Morgan", email: "alex@example.com", program: "Computer Science" },
+    userDetails: {
+      name: "Alex Morgan",
+      email: "alex@example.com",
+      program: "Computer Science",
+      start_date: "2027-01-15",
+      essay:
+        "I want to study computer science to build tools that make the web usable for everyone.",
+    },
     async createBrowser(): Promise<BrowserDriver> {
       return {
         open: async () => observation(),

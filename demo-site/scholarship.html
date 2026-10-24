@@ -110,16 +110,16 @@
         <input id="email" name="email" type="email" autocomplete="email" required />
 
         <label for="program">Program <span class="hint">(required)</span></label>
-        <input id="program" name="program" list="programs" autocomplete="off" required />
-        <datalist id="programs">
-          <option value="Computer Science"></option>
-          <option value="Electrical Engineering"></option>
-          <option value="Mathematics"></option>
-          <option value="Data Science"></option>
-        </datalist>
+        <input
+          id="program"
+          name="program"
+          placeholder="e.g. Computer Science"
+          autocomplete="off"
+          required
+        />
 
         <label for="start">Start date</label>
-        <input id="start" name="start" type="date" />
+        <input id="start" name="start" placeholder="YYYY-MM-DD" autocomplete="off" />
 
         <label for="essay"
           >Why do you deserve this scholarship? <span class="hint">(up to 500 words)</span></label

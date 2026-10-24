@@ -84,6 +84,21 @@ ACCESSPILOT_AGENT=fake ACCESSPILOT_PLANNER=gemma ACCESSPILOT_BROWSER=real ACCESS
 - Every step is one billed request. A task stops after 30 Twinly requests; change that with
   `ACCESSPILOT_TWINLY_MAX_REQUESTS`. Plans have small daily quotas, so check yours first: a full
   scholarship task takes roughly 10 requests.
+- The user's approved details (`userDetails`) are added to the goal Twinly sees, because a model
+  that only reads "complete this application" cannot type a name it was never told. Keys that look
+  like passwords, card numbers or codes are left out, and long values are cut.
+- **Twinly's coordinates are not always on its documented grid.** The same request has come back as
+  grid values (500, 481) and as image pixels (640, 346). Each click is read both ways and the
+  reading that lands on a control with the name Twinly gave is used (`resolveClickPoint`). Worth
+  reporting to Twinly.
+- A click that still lands beside its field is pulled onto the control it names. A click Twinly marks as
+  consequential must land on the control it names, because the user approves it by that name; if it
+  doesn't, and exactly one control carries the name, it is moved there (`snapClick`).
+- `ACCESSPILOT_DEBUG=1` logs each step's coordinates, what was under them, the result code and Twinly's
+  token usage. It never logs typed text.
+- Measured on the demo form: a full run is about 12 steps and 12 Twinly calls (roughly 50,000 tokens, 4 to
+  5 seconds per call), with one approval prompt, for the final Submit. The model is not deterministic, so
+  record more than one take.
 - If Twinly can't be used (usage limit, bad key, network), the task ends with a plain `task.failed`
   message. It never falls back silently to a scripted answer.
 

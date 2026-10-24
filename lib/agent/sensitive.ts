@@ -75,3 +75,8 @@ export function handoffInstructions(handoff: Handoff): string {
 export function maskIfSensitive(label: string, value: string): string {
   return SECRET.test(label) || CAPTCHA.test(label) ? "••••" : value;
 }
+
+/** True for a profile key whose value must never leave the server (passwords, card numbers, codes). */
+export function isSensitiveKey(key: string): boolean {
+  return SECRET.test(key.replace(/[_-]+/g, " ")) || CAPTCHA.test(key);
+}

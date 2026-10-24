@@ -684,3 +684,87 @@ describe("handing over when Twinly says a secret is needed", () => {
     expect(run.last()?.type).toBe("task.completed");
   });
 });
+
+describe("the goal the action provider sees", () => {
+  it("carries the user's approved details, so a real model can fill the form", async () => {
+    const { deps } = makeDeps([done()], {
+      userDetails: { name: "Alex Morgan", email: "alex@example.com", start_date: "2027-01-15" },
+    });
+    const run = start(deps);
+    await run.finished;
+    const goal = (deps.actions.nextAction as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+      .goal as string;
+    expect(goal).toContain("Apply for the scholarship");
+    expect(goal).toContain("- Name: Alex Morgan");
+    expect(goal).toContain("- Start date: 2027-01-15");
+    expect(goal).toMatch(/do not make up any others/);
+  });
+
+  it("never sends anything that looks like a password, card number or code", async () => {
+    const { deps } = makeDeps([done()], {
+      userDetails: {
+        name: "Alex",
+        password: "hunter2",
+        card_number: "4242 4242 4242 4242",
+        "one-time code": "123456",
+        cvv: "999",
+      },
+    });
+    const run = start(deps);
+    await run.finished;
+    const goal = (deps.actions.nextAction as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+      .goal as string;
+    expect(goal).toContain("Alex");
+    for (const secret of ["hunter2", "4242", "123456", "999"]) expect(goal).not.toContain(secret);
+  });
+
+  it("leaves the goal alone when there are no details, and stays within the length limit", async () => {
+    const plain = makeDeps([done()], { userDetails: {} });
+    await start(plain.deps).finished;
+    expect(
+      (plain.deps.actions.nextAction as ReturnType<typeof vi.fn>).mock.calls[0]?.[0].goal,
+    ).toBe("Apply for the scholarship");
+
+    const huge = makeDeps([done()], { userDetails: { essay: "word ".repeat(2000), name: "Alex" } });
+    await start(huge.deps).finished;
+    const goal = (huge.deps.actions.nextAction as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+      .goal as string;
+    expect(goal.length).toBeLessThan(1500);
+    expect(goal).toContain("- Name: Alex"); // the long value did not push the short one out
+  });
+});
+
+describe("a click that lands beside the field Twinly named", () => {
+  const shot = {
+    imageDataUrl: "data:image/png;base64,AAAA",
+    width: 10,
+    height: 10,
+    coordinateSpace: "viewport-css-pixels" as const,
+  };
+  const formPage = {
+    url: "http://localhost:4000/s",
+    title: "Form",
+    elements: [
+      {
+        role: "textbox",
+        label: "Full name (required)",
+        bounds: { x: 100, y: 200, width: 300, height: 40 },
+      },
+    ],
+  };
+
+  it("is moved onto the field before it reaches the browser, so no approval is needed", async () => {
+    const { deps, execute } = makeDeps(
+      [act(click("c", 150, 170, "Full name textbox")), done()],
+      {},
+      {
+        open: async () => ({ screenshot: shot, pageContext: formPage }),
+        observe: async () => ({ screenshot: shot, pageContext: formPage }),
+      },
+    );
+    const run = start(deps);
+    await run.finished;
+    expect(run.types()).not.toContain("approval.required");
+    expect(execute.mock.calls[0]?.[0]).toMatchObject({ x: 250, y: 220 });
+  });
+});

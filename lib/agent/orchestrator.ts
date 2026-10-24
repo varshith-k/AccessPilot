@@ -8,7 +8,14 @@ import {
   type UserInputReason,
 } from "@/lib/contracts";
 import { AbortedError, abortable, sleep, withTimeout } from "./errors";
-import { detectHandoff, elementAt, handoffInstructions, maskIfSensitive } from "./sensitive";
+import {
+  detectHandoff,
+  elementAt,
+  handoffInstructions,
+  isSensitiveKey,
+  maskIfSensitive,
+} from "./sensitive";
+import { snapClick } from "./snap";
 import {
   DEFAULT_LIMITS,
   type ActionHistoryItem,
@@ -21,6 +28,9 @@ import {
   type Progress,
   type TaskControl,
 } from "./types";
+
+/** Opt-in trace for working out why a model's step behaved as it did. Never logs typed text. */
+const DEBUG = () => process.env.ACCESSPILOT_DEBUG === "1";
 
 /** How long and how often to re-look at a page before treating it as settled. */
 const SETTLE_PAUSE_MS = 150;
@@ -86,6 +96,36 @@ function humanize(key: string): string {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Limits so the goal stays under what the action provider accepts, whatever the profile holds. */
+const MAX_DETAILS_CHARS = 1200;
+const MAX_VALUE_CHARS = 400;
+
+/**
+ * The goal as the action provider sees it: the user's request plus the details they have approved
+ * for use. A model that only sees "complete this application" cannot type a name it was never told.
+ * Anything that looks like a password, card number or code is left out, so a secret never leaves the
+ * server, and a value is never invented for a field that has none.
+ */
+export function composeGoal(goal: string, userDetails?: Record<string, string>): string {
+  const lines: string[] = [];
+  let used = 0;
+  for (const [key, value] of Object.entries(userDetails ?? {})) {
+    const trimmed = value.trim();
+    if (!trimmed || isSensitiveKey(key)) continue;
+    const shown =
+      trimmed.length > MAX_VALUE_CHARS ? `${trimmed.slice(0, MAX_VALUE_CHARS)}…` : trimmed;
+    const line = `- ${humanize(key)}: ${shown}`;
+    if (used + line.length > MAX_DETAILS_CHARS) continue; // skip what does not fit, keep the rest
+    lines.push(line);
+    used += line.length;
+  }
+  if (lines.length === 0) return goal;
+  return `${goal}
+
+Details the user has approved for this task. Use only these, and do not make up any others:
+${lines.join("\n")}`;
 }
 
 export interface RunInput {
@@ -245,6 +285,8 @@ export async function runTask(
       obs = await guard(browser.observe());
     }
 
+    const actionGoal = composeGoal(input.goal, deps.userDetails);
+
     // Look, act, check, repeat.
     const history: ActionHistoryItem[] = [];
     let step = 0;
@@ -254,7 +296,7 @@ export async function runTask(
     while (step < limits.maxSteps) {
       const next = await guard(
         deps.actions.nextAction({
-          goal: input.goal,
+          goal: actionGoal,
           screenshot: obs.screenshot,
           pageContext: obs.pageContext,
           history,
@@ -301,13 +343,34 @@ export async function runTask(
         continue;
       }
       // Clicks are only valid against the view they were planned from, so name that view.
-      const action: BrowserAction =
+      const stamped: BrowserAction =
         (parsed.data.type === "click" || parsed.data.type === "double_click") &&
         obs.observationId &&
         !parsed.data.observationId
           ? { ...parsed.data, observationId: obs.observationId }
           : parsed.data;
+      // A click a few pixels off its field is pulled onto it before any safety check looks at it.
+      const action = snapClick(stamped, obs.pageContext);
       step++;
+      if (DEBUG()) {
+        const under =
+          action.type === "click" || action.type === "double_click"
+            ? elementAt(obs.pageContext, action.x, action.y)
+            : undefined;
+        console.debug("[agent] step", step, {
+          type: action.type,
+          label: action.label,
+          commits: action.commits,
+          ...(action.type === "click" || action.type === "double_click"
+            ? {
+                x: Math.round(action.x),
+                y: Math.round(action.y),
+                snapped: action !== stamped,
+                under: under ? `${under.role}: ${under.label}` : "no known control",
+              }
+            : {}),
+        });
+      }
       const totalSteps = Math.max(plan.steps.length, step);
       ctl.emit({ type: "step.started", step, description: describe(action, false), totalSteps });
 
@@ -360,6 +423,14 @@ export async function runTask(
           );
           return;
         }
+      }
+
+      if (DEBUG()) {
+        console.debug("[agent] result", step, {
+          status: result.status,
+          ...(result.status === "failed" ? { code: result.error.code } : {}),
+          ...(result.status === "executed" ? { verification: result.verification } : {}),
+        });
       }
 
       if (result.status === "cancelled") return;

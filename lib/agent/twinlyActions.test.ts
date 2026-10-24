@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BrowserPageContext, BrowserScreenshot } from "@/lib/contracts";
 import { normalizeTwinlyAction, type TwinlyAction } from "@/lib/twinly/actions";
 import { TwinlyError, type NextActionInput, type NextActionResult } from "@/lib/twinly/client";
-import { createTwinlyActions, type TwinlyLike } from "./twinlyActions";
+import { createTwinlyActions, resolveClickPoint, type TwinlyLike } from "./twinlyActions";
 
 const shot: BrowserScreenshot = {
   imageDataUrl: "data:image/png;base64,AAAA",
@@ -192,5 +192,91 @@ describe("createTwinlyActions: when Twinly cannot be used", () => {
       message: expect.stringMatching(/allowed for one task/),
     });
     expect(nextAction).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("resolveClickPoint: Twinly sometimes answers in image pixels instead of its 0 to 1000 grid", () => {
+  const size = { width: 1280, height: 720 };
+  const form: BrowserPageContext = {
+    url: "http://localhost:4000/s",
+    title: "Form",
+    elements: [
+      {
+        role: "textbox",
+        label: "Full name (required)",
+        bounds: { x: 340, y: 326, width: 600, height: 40 },
+      },
+      {
+        role: "button",
+        label: "Submit application",
+        bounds: { x: 100, y: 600, width: 200, height: 48 },
+      },
+    ],
+  };
+  const clickAnswer = (raw: { x: number; y: number }, label = "Full name textbox") => {
+    const result = answer({ type: "click", ...raw, label });
+    if (result.action.type !== "click") throw new Error("expected a click");
+    return result.action;
+  };
+
+  it("uses the grid reading when it lands on the named control", () => {
+    expect(resolveClickPoint(clickAnswer({ x: 500, y: 481 }), form, size)).toEqual({
+      x: 640,
+      y: 346,
+    });
+  });
+
+  it("uses the pixel reading when only that one lands on the named control", () => {
+    // 640,346 as a grid point is (819, 249): nothing there. As pixels it is the middle of the field.
+    expect(resolveClickPoint(clickAnswer({ x: 640, y: 346 }), form, size)).toEqual({
+      x: 640,
+      y: 346,
+    });
+  });
+
+  it("prefers the reading on the control that carries the name over one on some other control", () => {
+    const crowded: BrowserPageContext = {
+      ...form,
+      elements: [
+        ...form.elements,
+        {
+          role: "textbox",
+          label: "Email (required)",
+          bounds: { x: 760, y: 220, width: 120, height: 60 },
+        }, // under the grid reading
+      ],
+    };
+    expect(resolveClickPoint(clickAnswer({ x: 640, y: 346 }), crowded, size)).toEqual({
+      x: 640,
+      y: 346,
+    });
+  });
+
+  it("falls back to the documented grid reading when neither reading lands on a control", () => {
+    expect(resolveClickPoint(clickAnswer({ x: 100, y: 100 }), form, size)).toEqual({
+      x: 128,
+      y: 72,
+    });
+  });
+
+  it("does not guess when the page is unknown", () => {
+    expect(resolveClickPoint(clickAnswer({ x: 640, y: 346 }), undefined, size)).toEqual({
+      x: 819,
+      y: 249,
+    });
+  });
+
+  it("is used end to end: a pixel-style answer still clicks the right field", async () => {
+    const { client } = fakeClient(
+      answer({ type: "click", x: 640, y: 346, label: "Full name textbox" }),
+    );
+    const provider = createTwinlyActions(client);
+    const next = await provider.nextAction({
+      goal: "g",
+      screenshot: shot,
+      pageContext: form,
+      history: [],
+    });
+    expect(next).toMatchObject({ kind: "action", action: { type: "click", x: 640, y: 346 } });
   });
 });
