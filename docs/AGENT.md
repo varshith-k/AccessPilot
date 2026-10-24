@@ -56,12 +56,16 @@ the API answers `500 internal_error` ("isn't set up on this server yet") until t
 
 Edit `getAgentDeps()` in `lib/agent/dependencies.ts`.
 
-**Gemma** (needs PR #3, `feat/gemma-brain`): the functions already match the `Planner` port.
+**Gemma** (done, merged in PR #3): `getAgentDeps()` already uses it when `ACCESSPILOT_PLANNER=gemma`
+and `GEMINI_API_KEY` is set. It plans, describes pages and narrates; Twinly and the browser stay
+scripted until their modules land.
 
-```ts
-import { planTask, mapPage, narrate } from "@/lib/ai";
-planner: { planTask, mapPage, narrate },
+```bash
+ACCESSPILOT_AGENT=fake ACCESSPILOT_PLANNER=gemma NEXT_PUBLIC_TASK_CLIENT=http npm run dev
 ```
+
+Gemma's plan can ask for details the demo profile lacks (for example the essay). The task then
+pauses with `user_input.required` and continues after Resume. A planning call takes several seconds.
 
 **Twinly**: implement `ActionProvider.nextAction({ goal, screenshot, history, signal })` and return
 `{ kind: "action", action }` (a validated `BrowserAction` with coordinates already in viewport CSS
