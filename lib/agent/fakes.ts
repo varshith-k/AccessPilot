@@ -147,28 +147,44 @@ export type LabelStep = { click: string; commits?: boolean } | { type: string; i
  * what it does is exactly the script.
  */
 export function createLabelDrivenActions(steps: LabelStep[], doneSummary: string): ActionProvider {
+  const MAX_SCROLLS = 6;
   let index = 0;
+  let scrolls = 0;
+  let id = 0;
   const find = (page: BrowserPageContext | undefined, name: string) =>
     page?.elements.find((el) => el.bounds && el.label.toLowerCase().includes(name.toLowerCase()));
 
   return {
     async nextAction({ pageContext }): Promise<NextAction> {
-      const step = steps[index++];
+      const step = steps[index];
       if (!step) return { kind: "done", summary: doneSummary };
-      const id = `script_${index}`;
+      const actionId = `script_${++id}`;
+
       if ("type" in step) {
+        index++;
         return {
           kind: "action",
-          action: { id, type: "type", text: step.type, label: step.into, commits: false },
+          action: { id: actionId, type: "type", text: step.type, label: step.into, commits: false },
         };
       }
+
       const target = find(pageContext, step.click);
-      if (!target?.bounds)
+      if (!target?.bounds) {
+        // Like a person would: scroll down and look again before giving up.
+        if (scrolls++ < MAX_SCROLLS) {
+          return {
+            kind: "action",
+            action: { id: actionId, type: "scroll", deltaX: 0, deltaY: 400, commits: false },
+          };
+        }
         return { kind: "fail", message: `I couldn't find "${step.click}" on the page.` };
+      }
+      scrolls = 0;
+      index++;
       return {
         kind: "action",
         action: {
-          id,
+          id: actionId,
           type: "click",
           x: target.bounds.x + target.bounds.width / 2,
           y: target.bounds.y + target.bounds.height / 2,

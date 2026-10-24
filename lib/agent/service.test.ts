@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TaskEvent } from "@/lib/contracts";
+import type { BrowserPageContext, TaskEvent } from "@/lib/contracts";
 import { AgentError } from "./errors";
-import { createFakeDeps } from "./fakes";
+import { createFakeDeps, createLabelDrivenActions } from "./fakes";
 import { TaskService } from "./service";
 import { TaskStore } from "./taskStore";
 import { act, click, done, makeDeps } from "./testkit";
@@ -139,5 +139,61 @@ describe("TaskService", () => {
     service.approve(taskId, approval && "approvalId" in approval ? approval.approvalId : "");
     await vi.waitFor(() => expect(events.at(-1)?.type).toBe("task.completed"));
     expect(done().kind).toBe("done");
+  });
+});
+
+describe("createLabelDrivenActions", () => {
+  const shot = {
+    imageDataUrl: "data:image/png;base64,AAAA",
+    width: 10,
+    height: 10,
+    coordinateSpace: "viewport-css-pixels" as const,
+  };
+  const withButton: BrowserPageContext = {
+    url: "http://x/",
+    title: "T",
+    elements: [
+      {
+        role: "button",
+        label: "Submit application",
+        bounds: { x: 10, y: 20, width: 100, height: 40 },
+      },
+    ],
+  };
+  const empty: BrowserPageContext = { url: "http://x/", title: "T", elements: [] };
+  const ask = (
+    provider: ReturnType<typeof createLabelDrivenActions>,
+    pageContext: BrowserPageContext,
+  ) => provider.nextAction({ goal: "g", screenshot: shot, pageContext, history: [] });
+
+  it("clicks the middle of a control it can see, matching names loosely", async () => {
+    const provider = createLabelDrivenActions(
+      [{ click: "submit APPLICATION", commits: true }],
+      "ok",
+    );
+    expect(await ask(provider, withButton)).toMatchObject({
+      kind: "action",
+      action: { type: "click", x: 60, y: 40, commits: true },
+    });
+    expect(await ask(provider, withButton)).toEqual({ kind: "done", summary: "ok" });
+  });
+
+  it("scrolls to look for a control that is off screen, then finds it", async () => {
+    const provider = createLabelDrivenActions([{ click: "Submit application" }], "ok");
+    expect(await ask(provider, empty)).toMatchObject({
+      kind: "action",
+      action: { type: "scroll", deltaY: 400 },
+    });
+    expect(await ask(provider, withButton)).toMatchObject({
+      kind: "action",
+      action: { type: "click" },
+    });
+  });
+
+  it("gives up after scrolling a few times without finding it", async () => {
+    const provider = createLabelDrivenActions([{ click: "Nowhere" }], "ok");
+    let last: Awaited<ReturnType<typeof ask>> | undefined;
+    for (let i = 0; i < 10; i++) last = await ask(provider, empty);
+    expect(last).toMatchObject({ kind: "fail" });
   });
 });
