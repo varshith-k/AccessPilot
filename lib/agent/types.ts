@@ -72,6 +72,8 @@ export interface ActionProvider {
   nextAction(input: {
     goal: string;
     screenshot: BrowserScreenshot;
+    /** Element labels and bounds for the same view, for providers that want more than pixels. */
+    pageContext?: BrowserPageContext;
     history: readonly ActionHistoryItem[];
     signal?: AbortSignal;
   }): Promise<NextAction>;
@@ -80,6 +82,8 @@ export interface ActionProvider {
 // ---- Playwright (lib/browser) ------------------------------------------------------------------
 
 export interface Observation {
+  /** Identifies this exact view of the page. Click actions are only accepted against the latest one. */
+  observationId?: string;
   screenshot: BrowserScreenshot;
   pageContext: BrowserPageContext;
 }
@@ -89,6 +93,8 @@ export interface BrowserDriver {
   open(url: string, signal?: AbortSignal): Promise<Observation>;
   observe(): Promise<Observation>;
   execute: ExecuteBrowserAction;
+  /** Cancels whatever the browser is doing right now and refuses further work. Safe to call at any time. */
+  stop?(): Promise<void>;
   close(): Promise<void>;
 }
 

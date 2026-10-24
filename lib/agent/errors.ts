@@ -64,3 +64,8 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
     );
   });
 }
+
+/** Waits `ms`, or rejects with `AbortedError` as soon as `signal` aborts. */
+export function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return abortable(new Promise<void>((resolve) => setTimeout(resolve, ms)), signal);
+}
