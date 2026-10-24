@@ -31,6 +31,8 @@ export const browserActionSchema = z.discriminatedUnion("type", [
 export type BrowserAction = z.infer<typeof browserActionSchema>;
 
 export interface BrowserScreenshot {
+  url?: string;
+  capturedAt?: string;
   imageDataUrl: string;
   width: number;
   height: number;
@@ -44,7 +46,14 @@ export interface BrowserPageContext {
     role: string;
     label: string;
     bounds?: { x: number; y: number; width: number; height: number };
+    inputType?: string;
+    disabled?: boolean;
+    required?: boolean;
+    sensitive?: boolean;
+    invalid?: boolean;
   }>;
+  validationErrors?: string[];
+  truncated?: boolean;
 }
 
 export type ActionResult = {
