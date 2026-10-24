@@ -162,6 +162,17 @@ describe("stop", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("does not run an approved action if the user presses Stop right after approving", async () => {
+    const { deps, execute } = makeDeps([act(click("s", 200, 444, "Submit", true)), done()]);
+    const run = start(deps);
+    await run.waitFor("approval.required");
+    run.store.approve(run.task.id, run.find("approval.required")!.approvalId);
+    run.store.stop(run.task.id); // same tick: the approval is already resolved
+    await run.finished;
+    expect(execute).not.toHaveBeenCalled();
+    expect(run.last()).toMatchObject({ type: "task.stopped", by: "user" });
+  });
+
   it("is idempotent and a stop after the end is harmless", async () => {
     const { deps } = makeDeps([done()]);
     const run = start(deps);
@@ -253,6 +264,22 @@ describe("no leaking of what the agent types", () => {
     const run = start(deps);
     await run.finished;
     expect(JSON.stringify(run.task.events)).not.toContain("my-private-essay-text");
+  });
+});
+
+describe("unlabeled typing", () => {
+  it("does not put the typed text in the step description when Twinly gives no label", async () => {
+    const unlabeled = {
+      id: "t",
+      type: "type",
+      text: "very-private-words",
+      commits: false,
+    } as const;
+    const { deps } = makeDeps([act(unlabeled), done()]);
+    const run = start(deps);
+    await run.finished;
+    expect(JSON.stringify(run.task.events)).not.toContain("very-private-words");
+    expect(run.find("step.started")?.description).toBe("Typing your answer");
   });
 });
 
