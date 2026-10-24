@@ -88,6 +88,56 @@ describe("browser controller", () => {
     }
   });
 
+  it("clicks a standard field after hover changes its pixels between observation and execution", async () => {
+    const controller = await create();
+    try {
+      await navigate(controller, "/scholarship");
+      await controller.page.addStyleTag({ content: "#email:hover{background:rgb(255,0,0)}" });
+      await controller.page.mouse.move(0, 0);
+      const action = await click(controller, "#email");
+      await controller.page.locator("#email").hover();
+      expect(await controller.execute(action)).toMatchObject({ status: "executed" });
+      expect(
+        await controller.execute({
+          id: id(),
+          type: "type",
+          text: "ada@example.test",
+          commits: false,
+        }),
+      ).toMatchObject({ status: "executed" });
+    } finally {
+      await controller.close();
+    }
+  });
+
+  it("still rejects a visually changed canvas target", async () => {
+    const controller = await create();
+    try {
+      await navigate(controller);
+      await controller.page.evaluate(() => {
+        const canvas = document.createElement("canvas");
+        canvas.id = "visual-control";
+        canvas.width = 120;
+        canvas.height = 50;
+        document.body.prepend(canvas);
+        canvas.getContext("2d")!.fillRect(0, 0, 120, 50);
+      });
+      const action = await click(controller, "#visual-control");
+      await controller.page.evaluate(() => {
+        const canvas = document.getElementById("visual-control") as HTMLCanvasElement;
+        const context = canvas.getContext("2d")!;
+        context.fillStyle = "red";
+        context.fillRect(0, 0, 120, 50);
+      });
+      expect(await controller.execute(action)).toMatchObject({
+        status: "failed",
+        error: { code: "stale_observation" },
+      });
+    } finally {
+      await controller.close();
+    }
+  });
+
   it("requires approval for a native submit even when commits is false; consumes approval once", async () => {
     const controller = await create();
     try {
@@ -160,6 +210,61 @@ describe("browser controller", () => {
       await controller.close();
     }
   });
+
+  it("accepts reviewed native submit after hover and focus change without changing the form", async () => {
+    const controller = await create();
+    try {
+      await navigate(controller, "/scholarship");
+      await controller.page.addStyleTag({ content: "#submit:hover{background:rgb(255,0,0)}" });
+      await controller.page.locator("#name").fill("Ada Lovelace");
+      await controller.page.locator("#email").fill("ada@example.test");
+      await controller.page.locator("#program").fill("Computer Science");
+      const action = await click(controller, "#submit");
+      const pending = await controller.execute(action);
+      expect(pending.status).toBe("approval_required");
+      if (pending.status !== "approval_required") throw new Error("Missing approval");
+      await controller.page.locator("#submit").hover();
+      await controller.page.locator("#name").focus();
+      const result = await controller.execute(action, {
+        approval: { approvalId: pending.approvalId, actionId: action.id },
+        expected: { type: "visible", selector: "#confirmation", text: "Application received" },
+      });
+      expect(result).toMatchObject({ status: "executed", verification: "passed" });
+    } finally {
+      await controller.close();
+    }
+  });
+
+  it.each(["field", "destination", "position"])(
+    "rejects reviewed native submit when its %s changes",
+    async (change) => {
+      const controller = await create();
+      try {
+        await navigate(controller, "/scholarship");
+        const action = await click(controller, "#submit");
+        const pending = await controller.execute(action);
+        if (pending.status !== "approval_required") throw new Error("Missing approval");
+        expect(pending).not.toHaveProperty("fingerprint");
+        expect(pending).not.toHaveProperty("nativeSubmitFingerprint");
+        expect(pending).not.toHaveProperty("domFingerprint");
+        const before = demo.submissions;
+        await controller.page.evaluate((kind) => {
+          if (kind === "field")
+            (document.getElementById("name") as HTMLInputElement).value = "Changed during review";
+          if (kind === "destination")
+            document.querySelector("form")!.setAttribute("action", "/different-submit");
+          if (kind === "position") document.getElementById("submit")!.style.marginLeft = "100px";
+        }, change);
+        const result = await controller.execute(action, {
+          approval: { approvalId: pending.approvalId, actionId: action.id },
+        });
+        expect(result).toMatchObject({ status: "failed", error: { code: "stale_observation" } });
+        expect(demo.submissions).toBe(before);
+      } finally {
+        await controller.close();
+      }
+    },
+  );
 
   it("hands off sensitive controls and blocks invalid coordinates, keys and URLs", async () => {
     const controller = await create();
