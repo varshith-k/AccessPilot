@@ -18,6 +18,8 @@ It does not use the user's browser profile, credentials or real external sites.
    deliberately has `commits: false`.
 4. Review the browser and terminal summary. Type `yes` in the terminal to approve.
    Any other answer or EOF declines and closes the demo without submitting.
+   Hovering over Submit or switching focus during review is safe. Editing fields,
+   scrolling, resizing or changing the page invalidates the pending click.
 5. It checks for “Application received” and prints demo confirmation AP-1001.
 6. Press Enter to close the browser. Ctrl+C stops the run at any point.
 

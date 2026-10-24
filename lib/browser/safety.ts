@@ -87,11 +87,22 @@ export async function readSafetyState(page: Page, key: string) {
     const formDigest = Array.from(new Uint8Array(bytes))
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
+    const documentBytes =
+      location.href === "about:blank"
+        ? new ArrayBuffer(0)
+        : await crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(document.documentElement.outerHTML),
+          );
+    const documentDigest = Array.from(new Uint8Array(documentBytes))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
     return {
       blocked: state.blocked,
       scrollX,
       scrollY,
       formDigest,
+      documentDigest,
       selection:
         focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement
           ? [focused.selectionStart, focused.selectionEnd]
@@ -102,6 +113,7 @@ export async function readSafetyState(page: Page, key: string) {
 }
 
 export interface TargetSafety {
+  nativeSubmit: boolean;
   sensitive: boolean;
   manual: boolean;
   editable: boolean;
@@ -151,6 +163,7 @@ export async function inspectTarget(page: Page, action: BrowserAction): Promise<
         );
       const activatingKey = proposal.type === "key" && ["Enter", "Space"].includes(proposal.key);
       return {
+        nativeSubmit: isSubmit,
         sensitive,
         manual: Boolean(element instanceof HTMLIFrameElement || input?.type === "file"),
         editable,

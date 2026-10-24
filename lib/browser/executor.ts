@@ -43,8 +43,10 @@ const executionOptionsSchema = z.object({
 
 interface SavedObservation extends BrowserObservation {
   fingerprint: string;
+  nativeSubmitFingerprint: string;
 }
 interface PendingApproval {
+  nativeSubmit: boolean;
   id: string;
   action: string;
   actionId: string;
@@ -129,7 +131,7 @@ export class BrowserController {
     return this.enqueue(() =>
       this.withDeadline(async () => {
         if (this.stopped) throw new ExecutionError("cancelled", "This browser task has stopped.");
-        const { fingerprint: _fingerprint, ...observation } = await this.readObservation();
+        const observation = this.publicObservation(await this.readObservation());
         return observation;
       }),
     );
@@ -239,11 +241,40 @@ export class BrowserController {
     const fingerprint = createHash("sha256")
       .update(JSON.stringify({ image: screenshot.imageDataUrl, pageContext, state }))
       .digest("hex");
+    // Native submit controls retain their meaning across hover and focus changes.
+    // Bind approval to DOM, values, layout, viewport and scroll instead of pixels.
+    const nativeSubmitFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          pageContext,
+          documentDigest: state.documentDigest,
+          formDigest: state.formDigest,
+          scrollX: state.scrollX,
+          scrollY: state.scrollY,
+          width: screenshot.width,
+          height: screenshot.height,
+        }),
+      )
+      .digest("hex");
     const observationId =
       this.observation?.fingerprint === fingerprint ? this.observation.observationId : randomUUID();
-    const observation = { observationId, screenshot, pageContext, fingerprint };
+    const observation = {
+      observationId,
+      screenshot,
+      pageContext,
+      fingerprint,
+      nativeSubmitFingerprint,
+    };
     this.observation = observation;
     return observation;
+  }
+
+  private publicObservation({
+    observationId,
+    screenshot,
+    pageContext,
+  }: SavedObservation): BrowserObservation {
+    return { observationId, screenshot, pageContext };
   }
 
   private async runAction(
@@ -257,6 +288,7 @@ export class BrowserController {
       );
     const previous = this.observation;
     const before = await this.readObservation();
+    const canonical = JSON.stringify(action);
     const coordinateAction = action.type === "click" || action.type === "double_click";
     if (coordinateAction) {
       const viewport = this.session.page.viewportSize()!;
@@ -265,10 +297,15 @@ export class BrowserController {
           "invalid_coordinates",
           "The click is outside the browser viewport.",
         );
+      const reviewedNativeSubmit =
+        this.pending?.nativeSubmit &&
+        this.pending.action === canonical &&
+        this.pending.fingerprint === before.nativeSubmitFingerprint;
       if (
-        !previous ||
-        action.observationId !== previous.observationId ||
-        previous.fingerprint !== before.fingerprint
+        !reviewedNativeSubmit &&
+        (!previous ||
+          action.observationId !== previous.observationId ||
+          previous.fingerprint !== before.fingerprint)
       ) {
         this.pending = undefined;
         throw new ExecutionError(
@@ -315,7 +352,6 @@ export class BrowserController {
       throw new ExecutionError("no_editable_target", "Focus an editable field before typing.");
     if (target?.href && activatesTarget) this.session.assertUrlAllowed(target.href);
 
-    const canonical = JSON.stringify(action);
     const riskyNavigation = /\b(delete|remove|send|pay|purchase|confirm|submit)\b/i.test(
       action.type === "navigate"
         ? new URL(action.url).pathname
@@ -332,7 +368,9 @@ export class BrowserController {
       );
     if (
       this.pending &&
-      (this.pending.fingerprint !== before.fingerprint || this.pending.action !== canonical)
+      (this.pending.fingerprint !==
+        (this.pending.nativeSubmit ? before.nativeSubmitFingerprint : before.fingerprint) ||
+        this.pending.action !== canonical)
     ) {
       if (this.pending.action !== canonical)
         throw new ExecutionError(
@@ -359,12 +397,16 @@ export class BrowserController {
     }
     if (needsApproval && !options.approval) {
       this.pending ??= {
+        nativeSubmit: coordinateAction && Boolean(target?.nativeSubmit),
         id: randomUUID(),
         action: canonical,
         actionId: action.id,
-        fingerprint: before.fingerprint,
+        fingerprint:
+          coordinateAction && target?.nativeSubmit
+            ? before.nativeSubmitFingerprint
+            : before.fingerprint,
       };
-      const { fingerprint: _fingerprint, ...observation } = before;
+      const observation = this.publicObservation(before);
       return {
         actionId: action.id,
         status: "approval_required",
@@ -395,7 +437,7 @@ export class BrowserController {
         options.expected,
         options.verificationTimeoutMs ?? 2000,
       );
-      const { fingerprint: _fingerprint, ...observation } = await this.readObservation();
+      const observation = this.publicObservation(await this.readObservation());
       const after = await readSafetyState(this.session.page, this.guardKey);
       if (after.blocked || this.session.blockedMutation)
         throw new ExecutionError(
@@ -405,7 +447,7 @@ export class BrowserController {
       return { actionId: action.id, status: "executed", verification, ...observation };
     } catch (error) {
       if (error instanceof ExecutionError && !this.stopped && !this.session.isClosed) {
-        const { fingerprint: _fingerprint, ...observation } = await this.readObservation();
+        const observation = this.publicObservation(await this.readObservation());
         return { ...this.failure(action.id, error.code, error.message), ...observation };
       }
       throw error;
