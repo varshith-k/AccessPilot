@@ -1,6 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDemoServer } from "./server.mjs";
+import { createDemoServer } from "./scholarship-server.mjs";
 
 const server = createDemoServer();
 let base = "";

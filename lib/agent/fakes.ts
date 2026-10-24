@@ -137,3 +137,91 @@ export function createFakeDeps(options: FakeOptions = {}): AgentDeps {
     },
   };
 }
+
+/** One step of a label-driven script: act on the control whose name contains `on`. */
+export type LabelStep = { click: string; commits?: boolean } | { type: string; into?: string };
+
+/**
+ * Stand-in for Twinly on real pages. It finds controls by name in the page context, so it works on
+ * any layout, then proposes clicks and typing the way Twinly would. It never decides anything itself:
+ * what it does is exactly the script.
+ */
+export function createLabelDrivenActions(steps: LabelStep[], doneSummary: string): ActionProvider {
+  const MAX_SCROLLS = 6;
+  const MAX_RETRIES = 2;
+  let index = 0;
+  let scrolls = 0;
+  let retries = 0;
+  let id = 0;
+  let advancedLast = false;
+  const find = (page: BrowserPageContext | undefined, name: string) =>
+    page?.elements.find((el) => el.bounds && el.label.toLowerCase().includes(name.toLowerCase()));
+
+  return {
+    async nextAction({ pageContext, history }): Promise<NextAction> {
+      // A step that failed was not done: try it again from the fresh page, a couple of times, then say so.
+      if (history.at(-1)?.outcome === "failed" && advancedLast) {
+        if (retries++ >= MAX_RETRIES) {
+          return {
+            kind: "fail",
+            message: "I couldn't complete one of the steps, so I stopped. Nothing was submitted.",
+          };
+        }
+        index--;
+      } else if (history.at(-1)?.outcome === "executed") {
+        retries = 0;
+      }
+      advancedLast = false;
+
+      const step = steps[index];
+      if (!step) return { kind: "done", summary: doneSummary };
+      const actionId = `script_${++id}`;
+
+      if ("type" in step) {
+        index++;
+        advancedLast = true;
+        return {
+          kind: "action",
+          action: { id: actionId, type: "type", text: step.type, label: step.into, commits: false },
+        };
+      }
+
+      const target = find(pageContext, step.click);
+      if (!target?.bounds) {
+        // Like a person would: scroll down and look again before giving up.
+        if (scrolls++ < MAX_SCROLLS) {
+          return {
+            kind: "action",
+            action: { id: actionId, type: "scroll", deltaX: 0, deltaY: 400, commits: false },
+          };
+        }
+        return { kind: "fail", message: `I couldn't find "${step.click}" on the page.` };
+      }
+      scrolls = 0;
+      index++;
+      advancedLast = true;
+      return {
+        kind: "action",
+        action: {
+          id: actionId,
+          type: "click",
+          x: target.bounds.x + target.bounds.width / 2,
+          y: target.bounds.y + target.bounds.height / 2,
+          label: step.click,
+          commits: step.commits ?? false,
+        },
+      };
+    },
+  };
+}
+
+/** The scholarship flow on the demo site (demo-site/scholarship.html), as label-driven steps. */
+export const SCHOLARSHIP_STEPS: LabelStep[] = [
+  { click: "Full name" },
+  { type: "Alex Morgan", into: "Full name field" },
+  { click: "Email" },
+  { type: "alex@example.com", into: "Email field" },
+  { click: "Program" },
+  { type: "Computer Science", into: "Program field" },
+  { click: "Submit application", commits: true },
+];
