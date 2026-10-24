@@ -243,7 +243,7 @@ const scholarshipDeny: MockScenario = {
   ],
 };
 
-const passwordHandoff: MockScenario = {
+const signInHandoff: MockScenario = {
   name: "password-handoff",
   description: "Reach a password field and hand control to the user until they press Continue.",
   script: [
@@ -288,7 +288,7 @@ const passwordHandoff: MockScenario = {
     emit(300, {
       type: "screenshot",
       step: 2,
-      imageDataUrl: mockScreenshots.loginPassword,
+      imageDataUrl: mockScreenshots.loginHandoff,
       alt: "Password field highlighted and empty.",
     }),
     emit(PACE, {
@@ -440,7 +440,7 @@ const slowNetwork: MockScenario = {
 export const mockScenarios: { [N in MockScenarioName]: MockScenario } = {
   "scholarship-happy": scholarshipHappy,
   "scholarship-deny": scholarshipDeny,
-  "password-handoff": passwordHandoff,
+  "password-handoff": signInHandoff,
   failure,
   "slow-network": slowNetwork,
 };
