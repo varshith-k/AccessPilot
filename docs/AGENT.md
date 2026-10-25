@@ -24,6 +24,15 @@ npm run demo-site                                                 # http://local
 `ACCESSPILOT_FAKE_DELAY_MS=0` removes the pause between fake steps. Without `ACCESSPILOT_AGENT=fake`
 the API answers `500 internal_error` ("isn't set up on this server yet") until the real wiring exists.
 
+## What the model sees
+
+`serializePage` gives Gemma the page title and URL, the on-screen controls (`- role: label`),
+and then the page's readable text (`Page text:`), so it can answer questions about page content
+such as deadlines. Any `<page_context>` tags in website text are stripped, so a page can't
+close the untrusted-content wrapper the prompts put around it. The browser opens real sites
+with same-site navigation and outside files enabled; see "Real websites" in
+[BROWSER.md](BROWSER.md).
+
 ## The loop
 
 1. `task.started`, open the browser, `screenshot` step 0.

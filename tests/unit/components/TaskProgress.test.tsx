@@ -84,7 +84,7 @@ describe("WarningList", () => {
     const onDismiss = vi.fn();
     const { container } = render(
       <WarningList
-        warnings={[{ id: "w1", message: "Skipped an update." }]}
+        warnings={[{ id: "w1", message: "Skipped an update.", count: 1 }]}
         onDismiss={onDismiss}
       />,
     );

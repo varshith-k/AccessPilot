@@ -61,6 +61,33 @@ concurrent raw navigations or page mutations.
 Method-preserving 307/308 redirects after non-GET/HEAD requests are blocked rather
 than replaying a potentially consequential request.
 
+### Real websites: same-site navigation and outside files (opt-in)
+
+The strict policy above stays the default. Two options relax it for public sites, and
+the agent (`lib/agent/browserDriver.ts`) turns both on:
+
+- `sameSiteNavigation: true` also allows navigating to hosts of the same site: a host
+  and its parent or subdomains (`google.com` ↔ `www.google.com`,
+  `scholarships.ufl.edu` → `apply.scholarships.ufl.edu`). Scheme and port must match.
+  Unrelated sites, look-alikes (`google.com.evil.com`) and loopback hosts other than the
+  exact origin are still refused.
+- `thirdPartySubresources: true` lets a page load its own files (styles, scripts,
+  images, fonts and other GET/HEAD requests) from other **public https** sites, so pages
+  render as people see them. Documents (the page, frames, popups) still must be on an
+  allowed origin. Private and local addresses (`localhost`, `10/8`, `172.16/12`,
+  `192.168/16`, `169.254/16`, `*.internal`, `*.local`, IPv6 local ranges) are always
+  refused, because the browser runs on the server. Hostnames that resolve to private
+  addresses (DNS rebinding) are not detected; run the browser where that is acceptable.
+
+Writes (any method other than GET/HEAD/OPTIONS):
+
+- Background writes (fetch, XHR, beacons) to hosts outside the allowed site are always
+  dropped and never count as a submission attempt. Analytics can't receive form data this way.
+- Writes to the allowed site keep the approval rule: blocked and flagged
+  (`approval_required_by_page`) unless the action was approved.
+- Opening a page (`navigate`) does not fail because the page's scripts tried to write
+  while loading. Those writes are still blocked, so nothing reaches any server.
+
 The request handler fetches responses with automatic redirects disabled. Chromium
 must not follow redirects itself because later hops can bypass route interception.
 These controls are for controlled demo sites, not a sandbox for hostile websites
@@ -91,6 +118,13 @@ descendants when reading wrapping labels. Labels and error text are bounded.
 The map covers the top-level document, not iframe contents, shadow DOM, or a
 complete computed accessibility tree. Canvas-only controls still require Twinly.
 All page text is untrusted input, never an instruction to the orchestrator.
+
+`pageContext.text` carries the page's readable text for the model: headings (marked
+`#`, `##`, …), paragraphs, list items and link text, from `<main>`/`<article>` when the
+page has one, otherwise the whole body, including content below the fold. It skips
+form values, button labels, hidden and transparent elements, private fields, scripts
+and styles. It is bounded by `maxTextChars` (default 4000, `0` turns it off), and
+`textTruncated` says when more text exists. Treat it as untrusted website content.
 
 ## Proposed internal action contract
 

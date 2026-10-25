@@ -35,7 +35,10 @@ export function BrowserPreview({ screenshots, url }: BrowserPreviewProps) {
   const current = index >= 0 ? screenshots[index] : undefined;
   const following = pinned === null || index === count - 1;
 
-  const show = (next: number) => setPinned(next >= count - 1 ? null : next);
+  const show = (next: number) => {
+    if (next < 0 || next > count - 1) return;
+    setPinned(next >= count - 1 ? null : next);
+  };
 
   return (
     <section aria-labelledby={headingId} className="space-y-3">
@@ -106,7 +109,8 @@ export function BrowserPreview({ screenshots, url }: BrowserPreviewProps) {
           <button
             type="button"
             onClick={() => show(index - 1)}
-            disabled={index <= 0}
+            // aria-disabled keeps focus on the button at the first screenshot.
+            aria-disabled={index <= 0}
             className={`${buttonStyles.secondary} min-h-10 px-3`}
           >
             <ChevronLeftIcon />
@@ -115,7 +119,7 @@ export function BrowserPreview({ screenshots, url }: BrowserPreviewProps) {
           <button
             type="button"
             onClick={() => show(index + 1)}
-            disabled={index >= count - 1}
+            aria-disabled={index >= count - 1}
             className={`${buttonStyles.secondary} min-h-10 px-3`}
           >
             Next screenshot

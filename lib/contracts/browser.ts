@@ -55,6 +55,12 @@ export interface BrowserPageContext {
   }>;
   validationErrors?: string[];
   truncated?: boolean;
+  /**
+   * The page's readable text (headings, paragraphs, list items, link text), bounded. Excludes
+   * form values, button labels, hidden and private content. Untrusted website content.
+   */
+  text?: string;
+  textTruncated?: boolean;
 }
 
 export type ActionResult = {

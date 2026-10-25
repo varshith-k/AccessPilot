@@ -72,9 +72,10 @@ export function makeUiAction(type: UiActionType): UiAction {
       return { type, url: "https://example.edu/apply", goal: "Apply", at: AT };
     case "ui/start_succeeded":
       return { type, taskId: TASK_ID };
-    case "ui/start_failed":
     case "ui/decision_failed":
     case "ui/resume_failed":
+      return { type, message: "Something failed.", at: AT, failure: "retry" };
+    case "ui/start_failed":
     case "ui/stop_failed":
     case "ui/connection_lost":
       return { type, message: "Something failed.", at: AT };

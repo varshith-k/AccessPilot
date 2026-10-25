@@ -1,6 +1,6 @@
 import { SHORTCUT_LABELS } from "@/hooks/useKeyboardShortcuts";
 import { Spinner, StopIcon } from "./ui/icons";
-import { buttonStyles } from "./ui/styles";
+import { buttonStyles, shortcutHint } from "./ui/styles";
 
 export interface StopButtonProps {
   onStop(): void;
@@ -18,7 +18,7 @@ export function StopButton({ onStop, stopping }: StopButtonProps) {
     >
       {stopping ? <Spinner /> : <StopIcon fill="currentColor" />}
       {stopping ? "Stopping…" : "Stop"}{" "}
-      <span className="text-xs font-normal">({SHORTCUT_LABELS.stop})</span>
+      <span className={`text-xs font-normal ${shortcutHint}`}>({SHORTCUT_LABELS.stop})</span>
     </button>
   );
 }

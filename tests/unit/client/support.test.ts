@@ -106,7 +106,7 @@ describe("mock scenarios and screenshots", () => {
 
 describe("announcementFor", () => {
   it.each([
-    ["task.started", { text: "Starting. Looking at the page.", priority: "polite", speak: true }],
+    ["task.started", { text: "Looking at the page.", priority: "polite", speak: true }],
     ["page.map", { text: "Scholarship. This page has a form.", priority: "polite", speak: true }],
     [
       "step.started",

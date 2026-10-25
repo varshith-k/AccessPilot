@@ -92,11 +92,14 @@ describe("AccessPilotApp voice", () => {
 
   it("dictation fills the goal box for editing, and the task runs with narration spoken aloud", async () => {
     await startByVoice("scholarship-happy");
-    expect(screen.getByRole("textbox", { name: "What do you want to get done?" })).toHaveValue(
-      "Help me complete this scholarship application",
-    );
+    // The dictated goal became the task's goal (the form steps aside while the task runs).
+    expect(
+      within(screen.getByRole("region", { name: "Conversation history" })).getByText(
+        "Help me complete this scholarship application",
+      ),
+    ).toBeVisible();
     expect(synth.texts).toContain(
-      "Heard: Help me complete this scholarship application. It's in the goal box. Edit it if you need to, then press Start task.",
+      "Heard: Help me complete this scholarship application. It's in the goal box. Edit it if you need to, then say “start task” or press Start task.",
     );
     await advance(9000);
     act(() => synth.drain());
@@ -108,7 +111,11 @@ describe("AccessPilotApp voice", () => {
     const approve = vi.spyOn(client, "approve");
     await flush();
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/press Alt\+Shift\+M and say “approve”/)).toBeVisible();
+    expect(within(dialog).getByText(/Alt\+Shift\+M and say “approve”/)).toBeVisible();
+    expect(within(dialog).getByRole("button", { name: "Answer by voice" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
 
     speak("yes but change the program");
     expect(approve).not.toHaveBeenCalled();
@@ -162,7 +169,10 @@ describe("AccessPilotApp voice", () => {
     act(() => synth.drain());
     synth.spoken = [];
     pressShortcut("KeyR");
-    expect(synth.texts.at(-1)).toBe("Typing your email: ada@ufl.edu.");
+    // Repeat reads the hand-off instructions, the thing the user needs right now.
+    expect(synth.texts.at(-1)).toBe(
+      "Your turn. I don't type passwords. Please type your password in the browser window, then press Continue.",
+    );
     speak("what's on this page");
     expect(synth.texts.at(-1)).toMatch(/^Student portal sign in\./);
     speak("continue");
@@ -228,7 +238,8 @@ describe("AccessPilotApp voice", () => {
     const { client } = await startByVoice("scholarship-happy");
     const stop = vi.spyOn(client, "stop");
     await advance(3000);
-    const field = screen.getByRole("textbox", { name: "Website address" });
+    // Any text field: the form itself steps aside while a task runs.
+    const field = document.body.appendChild(document.createElement("input"));
     const sessions = FakeRecognition.instances.length;
     pressShortcut("KeyM", field);
     expect(FakeRecognition.instances).toHaveLength(sessions);

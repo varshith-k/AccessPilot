@@ -70,7 +70,9 @@ describe("AccessPilot page (integration, MockTaskClient)", () => {
     const user = openPage("scholarship-happy");
     await startWithKeyboard(user);
 
-    expect(screen.getByRole("button", { name: "Starting…" })).toBeDisabled();
+    // The form steps aside while the task runs; the status says what is happening.
+    expect(screen.getByText("Starting your task…", { selector: "p" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Status" })).toHaveFocus();
     await advance(500);
     expect(polite()).toMatch(/Starting your task\./);
 

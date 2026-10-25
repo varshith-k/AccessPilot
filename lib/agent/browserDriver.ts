@@ -134,6 +134,10 @@ export function createRealBrowserFactory(
         await closeLingering();
         controller = await createBrowserController({
           allowedOrigins: [new URL(url).origin],
+          // Real sites hop between www and the bare domain and load files from CDNs. Navigation
+          // stays within the site; outside files are GET-only from public addresses.
+          sameSiteNavigation: true,
+          thirdPartySubresources: true,
           headless: !options.headed,
         });
         if (stopped) {

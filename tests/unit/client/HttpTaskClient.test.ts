@@ -349,3 +349,48 @@ describe("backoffDelay", () => {
     ]);
   });
 });
+
+describe("found by user testing", () => {
+  it("a 404 on start says the server isn't available, not that a task no longer exists", async () => {
+    const client = makeClient(
+      vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 })),
+    );
+    const error = await client.start({ url: "https://example.edu", goal: "Apply" }).catch((e) => e);
+    expect(error).toBeInstanceOf(TaskClientError);
+    expect((error as TaskClientError).message).toMatch(/server isn't available right now/);
+    expect((error as TaskClientError).message).not.toMatch(/no longer exists/);
+  });
+
+  it("gateway errors on start get the same honest message; actions keep their own wording", async () => {
+    const fetch502 = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("<html>", { status: 502 }));
+    const start = await makeClient(fetch502)
+      .start({ url: "https://example.edu", goal: "Apply" })
+      .catch((e: TaskClientError) => e.message);
+    expect(start).toMatch(/server isn't available right now/);
+
+    const fetch404 = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 }));
+    const stop = await makeClient(fetch404)
+      .stop("t1")
+      .catch((e: TaskClientError) => e.message);
+    expect(stop).toMatch(/no longer exists/);
+  });
+
+  it("a server that replays old events and drops the stream still runs out of reconnects", () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const onEvent = vi.fn();
+    makeClient(vi.fn(), { maxReconnectAttempts: 3 }).subscribe("t1", onEvent, onError);
+    FakeEventSource.latest().emit(narration(1));
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const source = FakeEventSource.latest();
+      source.emit(narration(1)); // the same old event, replayed
+      source.fail();
+      vi.runOnlyPendingTimers();
+    }
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ kind: "connection_lost" }));
+    expect(FakeEventSource.instances.length).toBeLessThanOrEqual(5);
+    vi.useRealTimers();
+  });
+});

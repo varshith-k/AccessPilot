@@ -12,13 +12,33 @@ import {
 } from "react";
 import type { NarrationPriority } from "@/lib/contracts";
 
+export interface AnnounceOptions {
+  /** Announce even if the same text was just announced, e.g. when the user asked to repeat. */
+  force?: boolean;
+}
+
 export interface Announcer {
-  announce(text: string, priority?: NarrationPriority): void;
+  announce(text: string, priority?: NarrationPriority, options?: AnnounceOptions): void;
 }
 
 interface LiveMessages {
   polite: string;
   assertive: string;
+  /** Incremented on every update, so a region mounted later can tell old messages from new. */
+  politeVersion: number;
+  assertiveVersion: number;
+}
+
+const EMPTY_MESSAGES: LiveMessages = {
+  polite: "",
+  assertive: "",
+  politeVersion: 0,
+  assertiveVersion: 0,
+};
+
+/** Coalesced messages must still read as separate sentences. */
+function asSentence(text: string): string {
+  return /[.!?…:]["”’)]?$/.test(text) ? text : `${text}.`;
 }
 
 /** Polite messages arriving within this window are joined into one announcement. */
@@ -29,14 +49,14 @@ export const DEDUPE_WINDOW_MS = 2000;
 export const MAX_COALESCED = 3;
 
 const AnnouncerContext = createContext<Announcer | null>(null);
-const LiveMessagesContext = createContext<LiveMessages>({ polite: "", assertive: "" });
+const LiveMessagesContext = createContext<LiveMessages>(EMPTY_MESSAGES);
 
 /**
  * Owns the app's two live regions. Every component announces through `useAnnouncer` so that
  * messages are de-duplicated, rapid polite updates are coalesced, and assertive ones go first.
  */
 export function AnnouncerProvider({ children }: { children: ReactNode }) {
-  const [messages, setMessages] = useState<LiveMessages>({ polite: "", assertive: "" });
+  const [messages, setMessages] = useState<LiveMessages>(EMPTY_MESSAGES);
   const pendingPolite = useRef<string[]>([]);
   const politeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSpoken = useRef<Record<NarrationPriority, { text: string; at: number }>>({
@@ -55,7 +75,8 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // A trailing zero-width space alternates so a repeated message still changes the DOM text,
-  // which is what makes screen readers announce it again.
+  // which is what makes screen readers announce it again. It is computed outside state updaters
+  // because React may run an updater twice.
   const marked = (text: string, toggle: { current: boolean }) => {
     toggle.current = !toggle.current;
     return toggle.current ? text : `${text}​`;
@@ -66,13 +87,19 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
     const batch = pendingPolite.current.slice(-MAX_COALESCED);
     pendingPolite.current = [];
     if (batch.length === 0) return;
-    setMessages((current) => ({ ...current, polite: marked(batch.join(" "), politeToggle) }));
+    const polite = marked(batch.map(asSentence).join(" "), politeToggle);
+    setMessages((current) => ({
+      ...current,
+      polite,
+      politeVersion: current.politeVersion + 1,
+    }));
   }, []);
 
   const announce = useCallback(
-    (raw: string, priority: NarrationPriority = "polite") => {
+    (raw: string, priority: NarrationPriority = "polite", options?: AnnounceOptions) => {
       const text = raw.trim();
-      if (text === "" || isDuplicate(text, priority)) return;
+      if (text === "") return;
+      if (isDuplicate(text, priority) && !options?.force) return;
       if (priority === "assertive") {
         // Assertive news makes pending polite chatter stale.
         pendingPolite.current = [];
@@ -80,7 +107,13 @@ export function AnnouncerProvider({ children }: { children: ReactNode }) {
           clearTimeout(politeTimer.current);
           politeTimer.current = null;
         }
-        setMessages({ polite: "", assertive: marked(text, assertiveToggle) });
+        const assertive = marked(text, assertiveToggle);
+        setMessages((current) => ({
+          ...current,
+          polite: "",
+          assertive,
+          assertiveVersion: current.assertiveVersion + 1,
+        }));
         return;
       }
       pendingPolite.current.push(text);

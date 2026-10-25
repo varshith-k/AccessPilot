@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { StatusAnnouncer } from "../StatusAnnouncer";
 import { XIcon } from "./icons";
 import { IconButton } from "./IconButton";
 
@@ -62,6 +63,8 @@ export function ModalDialog({
     >
       {open && (
         <div>
+          {/* Live regions outside a modal are hidden from screen readers while it is open. */}
+          <StatusAnnouncer local />
           <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
             <div className="min-w-0 space-y-0.5">
               <h2

@@ -3,6 +3,7 @@ import type { TaskState } from "./taskState";
 
 /** One plain sentence describing where the task is, for the status area. */
 export function statusSentence(state: TaskState): string {
+  if (state.stopping && state.status !== "idle") return "Stopping…";
   switch (state.status) {
     case "idle":
       return "Ready. Enter a website address and what you want to get done.";
@@ -11,10 +12,13 @@ export function statusSentence(state: TaskState): string {
     case "planning":
       return "Looking at the page…";
     case "running": {
-      if (state.stopping) return "Stopping…";
+      if (state.pendingResume !== null) return "Continuing. AccessPilot is taking over again…";
       const current = state.steps.find((entry) => entry.step === state.currentStep);
       if (current && state.currentStep !== null) {
-        return describeStep(state.currentStep, state.totalSteps, current.description);
+        const described = describeStep(state.currentStep, state.totalSteps, current.description);
+        return current.status === "completed"
+          ? `${described} (done). Working on the next step…`
+          : described;
       }
       return "Working…";
     }
@@ -44,6 +48,7 @@ const TITLE_PREFIX: Record<TaskState["status"], string | null> = {
 };
 
 export function documentTitle(state: TaskState): string {
-  const prefix = TITLE_PREFIX[state.status];
+  const prefix =
+    state.status === "completed" && state.declined ? "Not submitted" : TITLE_PREFIX[state.status];
   return prefix === null ? "AccessPilot" : `${prefix} — AccessPilot`;
 }

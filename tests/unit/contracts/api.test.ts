@@ -17,6 +17,9 @@ describe("isAllowedTaskUrl", () => {
     "http://localhost:4000/demo",
     "http://127.0.0.1:3001",
     "http://[::1]:3001/",
+    "https://localhost:8443",
+    "https://bücher.example",
+    "https://192.168.1.10/form",
   ])("allows %s", (url) => {
     expect(isAllowedTaskUrl(url)).toBe(true);
   });
@@ -30,6 +33,18 @@ describe("isAllowedTaskUrl", () => {
     "example.edu",
     "https://user:pass@example.edu",
     "",
+    // Found by user testing: spaces and invisible characters that browsers silently "fix".
+    "https://exa mple.com",
+    "https://exa\u200bmple.com",
+    "https://example.com/\u202Egpj.exe",
+    "https://exa%20mple.com",
+    "https://.",
+    "https://example",
+    "https://-bad-.com",
+    "https://bad..com",
+    // Round 2: percent-encoded hosts decode to a different site than the one shown.
+    "https://example.org%2Eevil.com",
+    "https://%65xample.org",
   ])("rejects %s", (url) => {
     expect(isAllowedTaskUrl(url)).toBe(false);
   });
@@ -57,6 +72,18 @@ describe("startTaskRequestSchema", () => {
   it("explains which URLs are allowed", () => {
     const result = startTaskRequestSchema.safeParse({ url: "http://example.edu", goal: "Apply" });
     expect(result.error?.issues[0]?.message).toMatch(/https:\/\/.*localhost/);
+  });
+
+  it("still allows percent-encoding in the path and query", () => {
+    expect(isAllowedTaskUrl("https://example.org/a%20b?q=%2F")).toBe(true);
+  });
+
+  it("rejects goals made only of invisible characters", () => {
+    const url = "https://example.edu";
+    for (const goal of ["\u200b\u200b", "\u200b \u200b", "\ufeff", "\u202e"]) {
+      expect(startTaskRequestSchema.safeParse({ url, goal }).success).toBe(false);
+    }
+    expect(startTaskRequestSchema.safeParse({ url, goal: "Apply \u200b" }).success).toBe(true);
   });
 
   it("enforces the goal length limit", () => {
