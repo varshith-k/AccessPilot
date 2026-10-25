@@ -67,8 +67,8 @@ export class TaskService {
     this.store.deny(taskId, approvalId);
   }
 
-  resume(taskId: string): void {
-    this.store.resume(taskId);
+  resume(taskId: string, answer?: string): void {
+    this.store.resume(taskId, answer);
   }
 
   stop(taskId: string): void {

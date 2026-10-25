@@ -9,6 +9,7 @@ import {
 } from "@/lib/contracts";
 import { AbortedError, AgentError, abortable, sleep, withTimeout } from "./errors";
 import {
+  sanitizeDetails,
   detectHandoff,
   elementAt,
   handoffInstructions,
@@ -172,6 +173,8 @@ export async function runTask(
   const { signal } = ctl;
   let browser: BrowserDriver | undefined;
   let approvalCounter = 0;
+  // The user's approved details for this task; answers they give along the way are added.
+  let details: Record<string, string> = { ...(deps.userDetails ?? {}) };
 
   const guard = <T>(promise: Promise<T>) => abortable(promise, signal);
 
@@ -216,7 +219,7 @@ export async function runTask(
     const what = action.label?.trim() || describe(action, false);
     const fields = [
       { label: "Website", value: host(obs.pageContext.url) },
-      ...Object.entries(deps.userDetails ?? {}).map(([key, value]) => ({
+      ...Object.entries(details).map(([key, value]) => ({
         label: humanize(key),
         value: maskIfSensitive(key, value),
       })),
@@ -324,7 +327,7 @@ export async function runTask(
     }
     await say({ kind: "started", detail: plan.summary }, plan.summary);
 
-    const known = new Set(Object.keys(deps.userDetails ?? {}).map((k) => k.toLowerCase()));
+    const known = new Set(Object.keys(details).map((k) => k.toLowerCase()));
     const missing = plan.missingInfo.filter((m) => !known.has(m.field.toLowerCase()));
     if (missing.length > 0) {
       const questions = missing.map((m) => m.question).join(" ");
@@ -335,13 +338,16 @@ export async function runTask(
       ctl.emit({
         type: "user_input.required",
         reason: "other",
-        instructions: `${questions} Please type your answers in the browser window, then press Continue.`,
+        instructions: `${questions} Answer here, or type it in the browser window, then press Continue.`,
       });
       if ((await ctl.waitForResume()) === "stopped") return;
+      // The user's answer joins their approved details, minus anything secret.
+      const answer = sanitizeDetails({ answers: ctl.takeAnswer?.() }).answers;
+      if (answer) details = { ...details, answers: answer };
       obs = await guard(browser.observe());
     }
 
-    const actionGoal = composeGoal(input.goal, deps.userDetails);
+    const actionGoal = composeGoal(input.goal, details);
 
     // Look, act, check, repeat.
     const history: ActionHistoryItem[] = [];

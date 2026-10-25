@@ -379,9 +379,9 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     setChosenPane("chat");
     void session.deny(reason);
   };
-  const resume = () => {
+  const resume = (answer?: string) => {
     setChosenPane("chat");
-    void session.resume();
+    void session.resume(answer);
   };
 
   const repeat = () => {

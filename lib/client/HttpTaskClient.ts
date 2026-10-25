@@ -108,8 +108,8 @@ export class HttpTaskClient implements TaskClient {
     );
   }
 
-  async resume(taskId: string): Promise<void> {
-    await this.request(apiPaths.resume(taskId), {});
+  async resume(taskId: string, answer?: string): Promise<void> {
+    await this.request(apiPaths.resume(taskId), answer?.trim() ? { answer: answer.trim() } : {});
   }
 
   async stop(taskId: string): Promise<void> {

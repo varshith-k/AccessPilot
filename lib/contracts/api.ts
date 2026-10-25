@@ -116,6 +116,11 @@ export const denyRequestSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 
+/** `POST /api/tasks/:id/resume`: optionally carries the user's answer to the agent's question. */
+export const resumeRequestSchema = z.object({
+  answer: z.string().trim().max(1000).optional(),
+});
+
 /** `POST /api/tasks/:id/resume` and `POST /api/tasks/:id/stop` take an empty object. */
 export const emptyRequestSchema = z.object({});
 
@@ -141,6 +146,7 @@ export type StartTaskResponse = z.infer<typeof startTaskResponseSchema>;
 export type ApproveRequest = z.infer<typeof approveRequestSchema>;
 export type DenyRequest = z.infer<typeof denyRequestSchema>;
 export type EmptyRequest = z.infer<typeof emptyRequestSchema>;
+export type ResumeRequest = z.infer<typeof resumeRequestSchema>;
 export type ApiErrorResponse = z.infer<typeof apiErrorResponseSchema>;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
