@@ -70,6 +70,7 @@ const SUGGESTED_GOALS = [
   "Help me complete this scholarship application.",
   "Find the application deadline on this page.",
   "Fill in my contact details, then stop before submitting.",
+  "How many fields are on this page, and which are required?",
 ];
 
 export function AccessPilotApp({ client }: AccessPilotAppProps) {
