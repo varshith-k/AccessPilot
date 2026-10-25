@@ -437,6 +437,27 @@ describe("failure handling", () => {
     expect(close).toHaveBeenCalled();
   });
 
+  it("passes on our own plain-language errors instead of blaming itself", async () => {
+    const { AgentError } = await import("./errors");
+    const { deps } = makeDeps([done()], {
+      actions: {
+        nextAction: async () => {
+          throw new AgentError(
+            "invalid_request",
+            "I couldn't open that page. Please check the address and try again.",
+          );
+        },
+      },
+    });
+    const run = start(deps);
+    await run.finished;
+    expect(run.last()).toMatchObject({
+      code: "invalid_request",
+      message: "I couldn't open that page. Please check the address and try again.",
+      recoverable: true,
+    });
+  });
+
   it("fails cleanly if the browser cannot start", async () => {
     const { deps } = makeDeps([done()], {
       createBrowser: async () => {

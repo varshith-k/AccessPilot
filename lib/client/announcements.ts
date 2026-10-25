@@ -19,7 +19,8 @@ const HANDOFF_PREFIX: Record<
 };
 
 export function describeStep(step: number, totalSteps: number | null, description: string): string {
-  return totalSteps === null
+  // An estimate that isn't ahead of the current step says nothing ("Step 4 of about 4").
+  return totalSteps === null || totalSteps <= step
     ? `Step ${step}: ${description}`
     : `Step ${step} of about ${totalSteps}: ${description}`;
 }

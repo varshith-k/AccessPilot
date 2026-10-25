@@ -19,6 +19,7 @@ import { StatusBadge } from "../ui/StatusBadge";
 export interface TopBarProps {
   title: string;
   status: TaskStatus;
+  declined?: boolean;
   /** "demo" when the scripted mock client is in use, "live" for the real backend. */
   mode: "demo" | "live";
   theme: ThemePreference;
@@ -46,6 +47,7 @@ const THEME_NAME: Record<ThemePreference, string> = {
 export const TopBar = memo(function TopBar({
   title,
   status,
+  declined,
   mode,
   theme,
   onThemeChange,
@@ -71,7 +73,7 @@ export const TopBar = memo(function TopBar({
         </p>
       </div>
 
-      <StatusBadge status={status} className="max-sm:hidden" />
+      <StatusBadge status={status} declined={declined} className="max-sm:hidden" />
       <span
         className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium max-md:hidden ${
           mode === "live" ? "border-success/30 text-success" : "border-border text-muted"
@@ -120,7 +122,7 @@ export const TopBar = memo(function TopBar({
           label="Keyboard shortcuts"
           aria-keyshortcuts="?"
           onClick={onOpenShortcuts}
-          className="max-sm:hidden lg:hidden"
+          className="lg:hidden"
         >
           <KeyboardIcon />
         </IconButton>
