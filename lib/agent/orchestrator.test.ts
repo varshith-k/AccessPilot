@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { isTerminalEvent, taskEventSchema, type ActionResult } from "@/lib/contracts";
+import { runTask } from "./orchestrator";
+import { TaskStore } from "./taskStore";
 import { act, click, done, makeDeps, start, typeText } from "./testkit";
 
 describe("happy path", () => {
@@ -744,6 +746,18 @@ describe("the goal the action provider sees", () => {
       .goal as string;
     expect(goal.length).toBeLessThan(1500);
     expect(goal).toContain("- Name: Alex"); // the long value did not push the short one out
+  });
+
+  it("keeps the whole goal under Twinly's 2000-character limit, even with a long request", async () => {
+    const { deps } = makeDeps([done()], { userDetails: { notes: "n".repeat(1000), name: "Alex" } });
+    const store = new TaskStore();
+    const longGoal = "g".repeat(1000);
+    const task = store.create("http://localhost:4000/s", longGoal);
+    await runTask(deps, task, { url: "http://localhost:4000/s", goal: longGoal });
+    const goal = (deps.actions.nextAction as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+      .goal as string;
+    expect(goal.length).toBeLessThanOrEqual(1900);
+    expect(goal).toContain("- Name: Alex");
   });
 });
 

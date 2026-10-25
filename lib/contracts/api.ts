@@ -34,10 +34,27 @@ export const goalSchema = z
 
 const idSchema = z.string().trim().min(1);
 
+/** Longest free-text notes a user can save in "Your details". */
+export const PROFILE_NOTES_MAX_LENGTH = 1000;
+
+const profileText = (max: number) => z.string().trim().max(max).optional();
+
+/**
+ * Details the user saved in Settings ("Your details") to be used when filling in forms. All fields
+ * are optional; empty ones are ignored. Never passwords or card numbers: the agent hands those back.
+ */
+export const profileDetailsSchema = z.object({
+  name: profileText(200),
+  email: profileText(200),
+  phone: profileText(50),
+  notes: profileText(PROFILE_NOTES_MAX_LENGTH),
+});
+
 /** `POST /api/tasks` */
 export const startTaskRequestSchema = z.object({
   url: taskUrlSchema,
   goal: goalSchema,
+  details: profileDetailsSchema.optional(),
 });
 export const startTaskResponseSchema = z.object({
   taskId: idSchema,
@@ -74,6 +91,7 @@ export const API_ERROR_CODES = [
 ] as const;
 
 export type StartTaskRequest = z.infer<typeof startTaskRequestSchema>;
+export type ProfileDetails = z.infer<typeof profileDetailsSchema>;
 export type StartTaskResponse = z.infer<typeof startTaskResponseSchema>;
 export type ApproveRequest = z.infer<typeof approveRequestSchema>;
 export type DenyRequest = z.infer<typeof denyRequestSchema>;
