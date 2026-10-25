@@ -234,8 +234,8 @@ The UI enforces its side, but these are backend guarantees:
 - **No consequential action without approval.** Any action Twinly flags `commits: true`
   (submit, pay, send, delete) must emit `approval.required` and block until `approve` with that
   exact `approvalId`. `deny` must not perform the action. Continue with narration, then finish
-  with `task.completed` whose summary says it was not done ("Not submitted. Your answers are
-  still filled in.").
+  with `task.completed` whose summary says it was not done ("Not done: Submit application. I
+  stopped there, so nothing was submitted or changed.").
 - **No auto-approval and no timeout that approves.** If you add a timeout, it must end in
   `deny` behavior or `task.stopped` (`by: "system"`).
 - **Hand off what the agent must not do.** Password fields, card numbers and CAPTCHAs produce

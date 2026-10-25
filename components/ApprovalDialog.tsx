@@ -78,7 +78,7 @@ export function ApprovalDialog({
       className={`${dialogStyles} w-[min(36rem,calc(100vw-2rem))]`}
     >
       {approval && (
-        <div className="space-y-5 p-6">
+        <div className="space-y-5 p-5 sm:p-6">
           {/* Live regions outside a modal are hidden from screen readers while it is open. */}
           <StatusAnnouncer local />
           <div className="flex items-start gap-3">
@@ -122,8 +122,8 @@ export function ApprovalDialog({
             Nothing is submitted until you choose. Pressing Escape means Don&apos;t submit.
             {voiceHint && ` ${voiceHint}`}
           </p>
-          {/* Stays in view at the bottom of the dialog on short screens. */}
-          <div className="sticky -bottom-6 -mx-6 flex flex-col gap-2 border-t border-border bg-elevated px-6 py-4 sm:flex-row sm:justify-end">
+          {/* On short screens the details scroll; the two answers stay pinned and visible. */}
+          <div className="sticky bottom-0 z-10 -mx-5 flex flex-col gap-2 border-t border-border bg-elevated px-5 py-3 sm:-mx-6 sm:flex-row sm:justify-end sm:px-6">
             <button type="button" onClick={onDeny} className={buttonStyles.secondary}>
               Don&apos;t submit
             </button>

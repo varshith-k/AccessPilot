@@ -22,7 +22,7 @@ test.describe("approval dialog", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(page.getByRole("heading", { name: "Status" })).toBeFocused();
-    await expect(statusLine(page)).toHaveText(/^Not submitted\./);
+    await expect(statusLine(page)).toHaveText(/^Not done: /);
     await expect(
       page.getByRole("listitem").filter({ hasText: "Declined: Submit application" }),
     ).toBeVisible();

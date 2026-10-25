@@ -418,6 +418,77 @@ describe("app flows", () => {
     await until(() => liveText("assertive") === "Submitted. Confirmation number 4821.");
   });
 
+  describe("audit fixes", () => {
+    const goalBox = () => screen.getByRole("textbox", { name: "What do you want to get done?" });
+
+    async function finishTask(user: ReturnType<typeof userEvent.setup>) {
+      await fill(user);
+      await user.click(screen.getByRole("button", { name: "Start task" }));
+      await until(() => screen.queryByRole("dialog") !== null);
+      await user.click(screen.getByRole("button", { name: "Approve and submit" }));
+      await until(() => screen.queryByRole("button", { name: "Start a new task" }) !== null);
+    }
+
+    it("with nothing running, a goal that mentions stop is dictated, not treated as Stop", () => {
+      renderApp();
+      speak("Help me stop my subscription");
+      expect(goalBox()).toHaveValue("Help me stop my subscription");
+      expect(synth.texts.at(-1)).toMatch(/^Heard: Help me stop my subscription\./);
+      speak("stop");
+      expect(synth.texts.at(-1)).toBe("Nothing is running.");
+      expect(goalBox()).toHaveValue("Help me stop my subscription");
+    });
+
+    it("while a task runs, stop anywhere in a sentence still stops it", async () => {
+      const user = renderApp(new MockTaskClient({ scenario: "slow-network", speed: 0.05 }));
+      await fill(user);
+      await user.click(screen.getByRole("button", { name: "Start task" }));
+      await until(() => screen.queryByRole("button", { name: /^Stop/ }) !== null);
+      speak("help me stop my subscription");
+      await until(() => screen.queryByText(/^Stopped\./, { selector: "p.text-lg" }) !== null);
+    });
+
+    it("after a task ends, dictating a goal replaces the old one instead of adding to it", async () => {
+      const user = renderApp();
+      await finishTask(user);
+      expect(goalBox()).toHaveValue("Apply");
+      speak("Find the deadline");
+      expect(goalBox()).toHaveValue("Find the deadline");
+      speak("and the award amount");
+      expect(goalBox()).toHaveValue("Find the deadline and the award amount");
+    });
+
+    it("New task clears the goal, keeps the website address, and dictation starts fresh", async () => {
+      const user = renderApp();
+      await finishTask(user);
+      await user.click(screen.getByRole("button", { name: "Start a new task" }));
+      expect(goalBox()).toHaveValue("");
+      expect(screen.getByRole("textbox", { name: "Website address" })).toHaveValue(
+        "http://localhost:4000/scholarship",
+      );
+      expect(screen.getByRole("heading", { name: "Start a task" })).toHaveFocus();
+      speak("Find the deadline");
+      expect(goalBox()).toHaveValue("Find the deadline");
+    });
+
+    it("in demo mode a follow-up explains the limit instead of asking to submit the form", async () => {
+      const user = renderApp();
+      await finishTask(user);
+      await user.type(
+        screen.getByRole("textbox", { name: "Message AccessPilot" }),
+        "Now find the deadline",
+      );
+      await user.click(screen.getByRole("button", { name: "Send" }));
+      await until(
+        () =>
+          screen.queryByText(/^Demo mode only plays its scripted example/, {
+            selector: "p.text-lg",
+          }) !== null,
+      );
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
   describe("round 2", () => {
     it("repeat pressed twice quickly re-announces for screen reader users", async () => {
       settingsStore.update({ screenReaderMode: true });

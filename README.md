@@ -109,12 +109,16 @@ commands:
 
 | Say                            | When                        | Does                     |
 | ------------------------------ | --------------------------- | ------------------------ |
-| "stop"                         | Any time (always wins)      | Stops the task           |
+| "stop"                         | Any time (see below)        | Stops the task           |
 | "approve", "yes", "submit it"  | Only while asked to approve | Approves                 |
 | "don't submit", "no", "cancel" | Only while asked to approve | Declines                 |
 | "repeat"                       | Any time                    | Re-reads the last update |
 | "what's on this page"          | Any time                    | Re-reads the page map    |
 | "continue", "I'm done"         | During a hand-off           | Continues                |
+
+While a task runs, "stop" anywhere in what you say stops it. With nothing running, only "stop" on
+its own (or "stop it", "please stop") counts, so a goal like "help me stop my subscription" is
+dictated as a goal.
 
 Approval requires one of the approval phrases on its own. Anything else said while the approval
 dialog is open, like "yes but change the program", asks again and never approves.

@@ -20,6 +20,12 @@ export type VoiceCommand =
 export interface VoiceCommandContext {
   approvalOpen: boolean;
   handoffActive: boolean;
+  /**
+   * Whether a task is running (or starting, or waiting on the user). While it is, "stop"
+   * anywhere in an utterance stops it. When nothing is running, only a whole stop phrase counts,
+   * so a goal like "help me stop my subscription" is dictation. Defaults to true, the safe side.
+   */
+  taskActive?: boolean;
 }
 
 /** Lowercase, straighten apostrophes, drop punctuation, and collapse whitespace. */
@@ -148,6 +154,17 @@ const START_PHRASES = new Set([
   "begin the task",
 ]);
 
+/** Whole utterances that mean Stop, recognized when nothing is running. */
+const STOP_PHRASES = new Set([
+  "stop",
+  "stop it",
+  "stop now",
+  "stop that",
+  "stop the task",
+  "stop everything",
+  "please stop",
+]);
+
 const CLEAR_GOAL_PHRASES = new Set(["clear goal", "clear the goal", "clear my goal"]);
 
 const NEW_TASK_PHRASES = new Set([
@@ -167,17 +184,21 @@ function stripFillers(text: string): string {
 }
 
 /**
- * Turns a final transcript into a command. "Stop" anywhere in the utterance always wins, in
- * every state. Approve and deny are recognized only while the approval dialog is open, and only
+ * Turns a final transcript into a command. While a task is active, "stop" anywhere in the
+ * utterance always wins; with nothing running, only a whole stop phrase does. Approve and deny are recognized only while the approval dialog is open, and only
  * as exact phrases; anything else said while it is open asks again instead of guessing.
  */
 export function parseVoiceCommand(transcript: string, context: VoiceCommandContext): VoiceCommand {
   const normalized = normalizeTranscript(transcript);
   if (normalized === "") return { kind: "none", text: "" };
 
-  if (/\bstop\b/.test(normalized)) return { kind: "stop" };
-
   const phrase = stripFillers(normalized);
+  const taskActive = context.taskActive ?? true;
+  if (taskActive || context.approvalOpen || context.handoffActive) {
+    if (/\bstop\b/.test(normalized)) return { kind: "stop" };
+  } else if (STOP_PHRASES.has(phrase) || STOP_PHRASES.has(normalized)) {
+    return { kind: "stop" };
+  }
   // A question ("submit it?") is never an answer, however its words read once punctuation is gone.
   const isQuestion = /\?\s*$/.test(transcript.trim());
 

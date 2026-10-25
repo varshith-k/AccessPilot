@@ -7,6 +7,7 @@ import {
 } from "@/lib/contracts";
 import { TaskClientError } from "./errors";
 import {
+  demoFollowUpScript,
   mockScenarios,
   type MockScenarioName,
   type ScriptedEvent,
@@ -59,6 +60,8 @@ export class MockTaskClient implements TaskClient {
   private readonly latencyMs: number;
   private readonly runs = new Map<string, MockRun>();
   private nextId = 1;
+  /** The goal of the first task. Only that goal replays the script; others get a demo notice. */
+  private scriptedGoal: string | null = null;
 
   constructor(options: MockTaskClientOptions = {}) {
     this.scenario = options.scenario ?? "scholarship-happy";
@@ -83,9 +86,13 @@ export class MockTaskClient implements TaskClient {
       });
     }
     const taskId = `mock-${this.scenario}-${this.nextId++}`;
+    const goal = parsed.data.goal.trim().toLowerCase().replace(/\s+/g, " ");
+    this.scriptedGoal ??= goal;
+    const script =
+      goal === this.scriptedGoal ? mockScenarios[this.scenario].script : demoFollowUpScript;
     const run: MockRun = {
       taskId,
-      queue: [...mockScenarios[this.scenario].script],
+      queue: [...script],
       history: [],
       seq: 0,
       timer: null,

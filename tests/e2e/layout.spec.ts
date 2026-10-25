@@ -34,3 +34,46 @@ test("text resized to 200% still fits without horizontal scroll", async ({ page 
   expect(await hasHorizontalScroll(page)).toBe(false);
   await expect(page.getByRole("button", { name: "Start task" })).toBeVisible();
 });
+
+test("phone: approving from the Browser tab returns to the conversation and focuses Status", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openScenario(page, "scholarship-happy", { speed: 0.3 });
+  await fillAndStart(page);
+  await page.getByRole("button", { name: /^Browser/ }).click();
+  await expect(page.getByRole("button", { name: /^Browser/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Approve and submit" }).click();
+
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Conversation" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByRole("main")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Status" })).toBeFocused();
+});
+
+test("320x640: both approval answers are visible without scrolling the dialog", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openScenario(page, "scholarship-happy");
+  await fillAndStart(page);
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  for (const name of ["Don't submit", "Approve and submit"]) {
+    const box = await dialog.getByRole("button", { name }).boundingBox();
+    expect(box, name).not.toBeNull();
+    expect(box!.y + box!.height, name).toBeLessThanOrEqual(640);
+    expect(box!.y, name).toBeGreaterThanOrEqual(0);
+  }
+  // The details are still reachable by scrolling, and the buttons stay in view while they are.
+  await dialog.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect(dialog.getByText("Essay")).toBeInViewport();
+  await expect(dialog.getByRole("button", { name: "Approve and submit" })).toBeInViewport();
+});
