@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId } from "react";
 import { MAX_SPEECH_RATE, MIN_SPEECH_RATE, type SpeechSettings } from "@/lib/client/settings";
 import { VolumeIcon } from "./ui/icons";
 import { buttonStyles, hintStyles, inputStyles, labelStyles } from "./ui/styles";
@@ -147,13 +147,24 @@ export interface FirstRunSpeechPromptProps {
 /** Asked once, prominently, so screen reader users can avoid hearing everything twice. */
 export function FirstRunSpeechPrompt({ onChoose }: FirstRunSpeechPromptProps) {
   const id = useId();
+  // Asked before anything else: put screen reader users on the question, not on the page body.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      document.getElementById(`${id}-heading`)?.focus();
+    }
+  }, [id]);
   return (
     <section
       aria-labelledby={`${id}-heading`}
       className="animate-enter space-y-4 rounded-card border border-accent/40 bg-accent-soft/40 p-5"
     >
       <div className="space-y-1.5">
-        <h2 id={`${id}-heading`} className="text-base font-semibold">
+        <h2
+          id={`${id}-heading`}
+          tabIndex={-1}
+          className="text-base font-semibold focus:outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+        >
           Do you use your own screen reader?
         </h2>
         <p className="text-sm">

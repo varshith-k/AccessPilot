@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useId, useState } from "react";
-import type { TaskState } from "@/lib/client/taskState";
+import { isTerminalStatus, type TaskState } from "@/lib/client/taskState";
 import { BrowserPreview } from "./BrowserPreview";
 import { TaskProgress } from "./TaskProgress";
 import { ChevronRightIcon, Spinner } from "./ui/icons";
@@ -34,6 +34,7 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({
 }: BrowserWorkspaceProps) {
   const id = useId();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const waiting = state.status === "awaiting_approval" || state.status === "awaiting_user";
   const current = state.steps.find(
     (entry) => entry.step === state.currentStep && entry.status === "active",
   );
@@ -46,21 +47,31 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({
         <h2 id={`${id}-heading`} className="text-sm font-semibold">
           Live browser
         </h2>
-        <StatusBadge status={state.status} className="h-6 px-2 text-[11px]" />
+        <StatusBadge
+          status={state.status}
+          declined={state.declined}
+          className="h-6 px-2 text-[11px]"
+        />
       </div>
 
       <BrowserPreview
-        key={state.taskId ?? "none"}
+        key={`${state.taskId ?? "none"}-${isTerminalStatus(state.status) ? "end" : "run"}`}
         screenshots={state.screenshots}
         url={state.request?.url}
       />
 
       {current && (
         <div className="flex animate-enter items-start gap-3 rounded-card border border-accent/30 bg-accent-soft/50 p-4">
-          <Spinner className="mt-0.5 size-4 shrink-0 text-accent" />
+          {waiting ? null : <Spinner className="mt-0.5 size-4 shrink-0 text-accent" />}
           <div className="min-w-0 space-y-0.5">
             <p className={eyebrowStyles}>Current action</p>
-            <p className="text-sm font-medium">{current.description}</p>
+            <p className="text-sm font-medium">
+              {state.status === "awaiting_approval"
+                ? `Paused before: ${current.description}. Waiting for your approval.`
+                : state.status === "awaiting_user"
+                  ? `Paused: ${current.description}. Waiting for you.`
+                  : current.description}
+            </p>
           </div>
         </div>
       )}
@@ -79,7 +90,9 @@ export const BrowserWorkspace = memo(function BrowserWorkspace({
           </div>
         ) : (
           <p className="rounded-card border border-dashed border-border px-4 py-5 text-center text-sm text-muted">
-            Steps appear here as AccessPilot works, so you can follow along.
+            {isTerminalStatus(state.status)
+              ? "No steps were needed for this task."
+              : "Steps appear here as AccessPilot works, so you can follow along."}
           </p>
         )}
       </section>

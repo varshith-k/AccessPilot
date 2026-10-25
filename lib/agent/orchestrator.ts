@@ -7,7 +7,7 @@ import {
   type NarrationPriority,
   type UserInputReason,
 } from "@/lib/contracts";
-import { AbortedError, abortable, sleep, withTimeout } from "./errors";
+import { AbortedError, AgentError, abortable, sleep, withTimeout } from "./errors";
 import {
   detectHandoff,
   elementAt,
@@ -553,6 +553,11 @@ export async function runTask(
     if (error instanceof AbortedError) return;
     // Log the kind of failure only: messages from other modules might carry page text or keys.
     console.error("[agent] task failed:", error instanceof Error ? error.name : "unknown");
+    // Our own errors carry plain-language, user-safe messages ("I couldn't open that page…").
+    if (error instanceof AgentError) {
+      fail(error.code, error.message, true);
+      return;
+    }
     fail("internal_error", "Something went wrong on my side. Please try again.", true);
   } finally {
     try {

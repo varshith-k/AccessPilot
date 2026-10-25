@@ -24,7 +24,7 @@ export interface SidebarProps {
   newTaskBlocked: boolean;
   onOpenSettings(): void;
   onOpenShortcuts(): void;
-  currentTask: { goal: string; url: string; status: TaskStatus } | null;
+  currentTask: { goal: string; url: string; status: TaskStatus; declined: boolean } | null;
 }
 
 function hostOf(url: string): string {
@@ -143,7 +143,11 @@ export const Sidebar = memo(function Sidebar({
               <span className="truncate font-mono text-xs text-muted">
                 {hostOf(currentTask.url)}
               </span>
-              <StatusBadge status={currentTask.status} className="h-6 px-2 text-[11px]" />
+              <StatusBadge
+                status={currentTask.status}
+                declined={currentTask.declined}
+                className="h-6 px-2 text-[11px]"
+              />
             </div>
           </div>
         </div>
