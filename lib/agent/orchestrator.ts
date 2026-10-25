@@ -239,6 +239,9 @@ export async function runTask(
 
     // Understand the page and make a plan.
     const pageText = serializePage(obs.pageContext);
+    // Describing the page and planning are independent: ask for both at once.
+    const planning = deps.planner.planTask(input.goal, pageText, deps.userDetails);
+    planning.catch(() => {}); // handled below; avoid an unhandled rejection meanwhile
     let map: PageMap;
     try {
       map = await guard(deps.planner.mapPage(pageText));
@@ -254,7 +257,7 @@ export async function runTask(
 
     let plan: Plan;
     try {
-      plan = await guard(deps.planner.planTask(input.goal, pageText, deps.userDetails));
+      plan = await guard(planning);
     } catch (error) {
       if (error instanceof AbortedError) throw error;
       // The plan helps narration and progress, but the safety rules live here, not in the plan, and

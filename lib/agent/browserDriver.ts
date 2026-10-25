@@ -24,9 +24,10 @@ const MAX_OUTLINE_CHARS = 20_000;
 function outlinePage(): string {
   const clean = (text: string | null | undefined) =>
     (text ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  // Opacity is not checked: custom radios and checkboxes are often drawn over a transparent input.
   const visible = (el: Element) =>
     el instanceof HTMLElement &&
-    el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
+    el.checkVisibility({ checkVisibilityCSS: true }) &&
     !el.closest('[hidden], [aria-hidden="true"], [inert]');
   const labelOf = (el: HTMLElement): string => {
     const byId = el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null;
@@ -83,6 +84,14 @@ function outlinePage(): string {
     )
     .slice(0, 60);
 
+  // Readable text of the main content, so questions about what the page says can be answered.
+  // innerText never includes what is typed into fields.
+  const main = document.querySelector("main, [role='main'], article") ?? document.body;
+  const text = (main instanceof HTMLElement ? main.innerText : "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 8000);
+
   return [
     `Page: ${clean(document.title)}`,
     `Headings:`,
@@ -91,6 +100,8 @@ function outlinePage(): string {
     ...fields,
     `Buttons (${buttons.length}):`,
     ...buttons,
+    `Readable text of the page:`,
+    text,
   ].join("\n");
 }
 
