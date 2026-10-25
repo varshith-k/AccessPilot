@@ -574,7 +574,7 @@ export async function runTask(
     await say({ kind: "finished", detail: `The user declined: ${what}` }, "Okay, I won't do that.");
     ctl.emit({
       type: "task.completed",
-      summary: `Not done: ${what}. Nothing was submitted and your answers are still filled in.`,
+      summary: `Not done: ${what}. I stopped there, so nothing was submitted or changed.`,
     });
   }
 }
