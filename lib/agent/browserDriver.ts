@@ -3,6 +3,13 @@ import { createBrowserController, type BrowserController } from "@/lib/browser";
 import { AgentError } from "./errors";
 import type { BrowserDriver, Observation } from "./types";
 
+/** Which browser the agent drives: installed Google Chrome unless configured otherwise. */
+function browserChannel(): { channel?: string; channelFallback: boolean } {
+  const configured = process.env.ACCESSPILOT_BROWSER_CHANNEL?.trim();
+  if (configured === "chromium") return { channelFallback: false };
+  return { channel: configured || "chrome", channelFallback: true };
+}
+
 export interface RealBrowserOptions {
   /** Watch Chromium work. Defaults to headless. */
   headed?: boolean;
@@ -139,6 +146,9 @@ export function createRealBrowserFactory(
           sameSiteNavigation: true,
           thirdPartySubresources: true,
           headless: !options.headed,
+          // Google Chrome by default (ACCESSPILOT_BROWSER_CHANNEL=chromium for the bundled one);
+          // falls back to bundled Chromium where Chrome isn't installed.
+          ...browserChannel(),
         });
         if (stopped) {
           // Stop arrived while Chromium was starting.

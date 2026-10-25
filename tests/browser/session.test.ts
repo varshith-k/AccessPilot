@@ -77,6 +77,20 @@ describe("real Chromium sessions", () => {
     }
   });
 
+  it("falls back to bundled Chromium when the requested channel isn't installed", async () => {
+    // "msedge-canary" is not installed on test machines.
+    await expect(createBrowserSession({ channel: "msedge-canary" })).rejects.toThrow();
+    const session = await createBrowserSession({
+      channel: "msedge-canary",
+      channelFallback: true,
+    });
+    try {
+      expect(session.isClosed).toBe(false);
+    } finally {
+      await session.close();
+    }
+  });
+
   it("rejects unbounded timeouts and invalid dimensions before launching", async () => {
     await expect(createBrowserSession({ actionTimeoutMs: 0 })).rejects.toThrow(RangeError);
     await expect(
