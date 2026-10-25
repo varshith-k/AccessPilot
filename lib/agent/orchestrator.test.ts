@@ -795,3 +795,68 @@ describe("a click that lands beside the field Twinly named", () => {
     expect(execute.mock.calls[0]?.[0]).toMatchObject({ x: 250, y: 220 });
   });
 });
+
+describe("questions about the page", () => {
+  const asQuestion = (deps: ReturnType<typeof makeDeps>["deps"]) => {
+    const plan = deps.planner.planTask;
+    deps.planner.planTask = async (goal, page, details) => ({
+      ...(await plan(goal, page, details)),
+      intent: "explain_page",
+    });
+  };
+
+  it("answers from an outline of the whole page, without clicking anything or asking Twinly", async () => {
+    const outline = vi.fn(async () => "Form fields on the whole page (27):");
+    const { deps, execute } = makeDeps([act(click("a", 1, 1))], {}, { outline });
+    asQuestion(deps);
+    deps.planner.explainPage = vi.fn(async (pageText: string) =>
+      pageText.includes("(27)") ? "There are 27 fields." : "?",
+    );
+    const run = start(deps);
+    await run.finished;
+    expect(run.last()).toMatchObject({ type: "task.completed", summary: "There are 27 fields." });
+    expect(execute).not.toHaveBeenCalled();
+    expect(deps.actions.nextAction).not.toHaveBeenCalled();
+  });
+
+  it("uses the visible page when there is no outline", async () => {
+    const { deps } = makeDeps([]);
+    asQuestion(deps);
+    deps.planner.explainPage = vi.fn(async () => "It's a scholarship form.");
+    const run = start(deps);
+    await run.finished;
+    expect((deps.planner.explainPage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toContain(
+      "Page: Scholarship application",
+    );
+    expect(run.last()).toMatchObject({ summary: "It's a scholarship form." });
+  });
+
+  it("falls back to working on the page if answering fails or the outline breaks", async () => {
+    const { deps, execute } = makeDeps(
+      [act(click("a", 1, 1)), done("Did it.")],
+      {},
+      {
+        outline: async () => {
+          throw new Error("page gone");
+        },
+      },
+    );
+    asQuestion(deps);
+    deps.planner.explainPage = async () => {
+      throw new Error("Gemma down");
+    };
+    const run = start(deps);
+    await run.finished;
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(run.last()).toMatchObject({ summary: "Did it." });
+  });
+
+  it("acts as usual for ordinary tasks, even when it could answer questions", async () => {
+    const { deps, execute } = makeDeps([act(click("a", 1, 1)), done()]);
+    deps.planner.explainPage = vi.fn(async () => "never");
+    const run = start(deps);
+    await run.finished;
+    expect(deps.planner.explainPage).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
