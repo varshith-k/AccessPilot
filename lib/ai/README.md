@@ -23,7 +23,7 @@ Playwright's accessibility snapshot, not from raw HTML.
   This does not replace the Twinly `commits: true` gate. Enforce both.
 - Page text is fenced as untrusted data in every prompt. Still never put secrets in `pageContext` or `userDetails`.
 - Pages over 24,000 characters are truncated.
-- Thinking is on for `planTask` (slow, better plans) and off for the rest (about 5x faster). Override with `{ thinking }`.
+- Thinking is off by default everywhere (fast mode). Measured on planning: 2.5 to 8 s instead of 12 to 60 s, with the same intent accuracy. Override with `{ thinking: "high" }`.
 - Errors are `GemmaError` with a short message. Do not show `cause` to users.
 
 ## Tests

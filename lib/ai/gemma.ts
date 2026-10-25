@@ -207,7 +207,9 @@ export async function planTask(
     TaskPlanSchema,
     "plan",
     opts,
-    "high",
+    // Fast mode: plans in a few seconds instead of up to a minute, with the same intent accuracy
+    // in our measurements. The plan only drives narration, questions and missing details.
+    "minimal",
   );
   return enforceConfirmation(plan);
 }

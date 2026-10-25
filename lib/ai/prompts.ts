@@ -18,7 +18,7 @@ Respond with ONLY one JSON object, no markdown fences, no commentary, in exactly
 
 Rules:
 - 2 to 10 steps. Each step is one concrete thing a browser can do or the user must decide.
-- List in missingInfo every personal detail the task needs that the user has NOT already given. Never invent or assume personal data such as names, dates of birth, IDs, addresses, grades, or financial details.
+- List in missingInfo only the personal details that the user's request itself needs and that the user has NOT already given. If the user asks to fill in specific fields ("my name and email"), only those count; do not list every field on the page, and leave out choices the request already states (size, toppings, times). Never invent or assume personal data such as names, dates of birth, IDs, addresses, grades, or financial details.
 - Mark requiresConfirmation true on any step that submits, pays, sends, deletes, books, or otherwise cannot be undone, and set the top-level requiresConfirmation to true if any step does. Plans that fill an application or form MUST end with a review-and-ask-approval step before submitting.
 - Never plan to enter passwords, payment card numbers, or one-time codes. Plan a step asking the user to do that themselves.
 - If the request is too vague to plan (no clear goal), set clarifyingQuestion to one short question, and give a single step "Ask the user to clarify".

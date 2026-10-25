@@ -145,7 +145,7 @@ describe("planTask", () => {
     vi.unstubAllEnvs();
   });
 
-  it("thinks for planning but not for page maps or narration", async () => {
+  it("uses fast mode everywhere by default, and can be overridden", async () => {
     const level = (f: ReturnType<typeof vi.fn>) =>
       (
         JSON.parse((f.mock.calls[0]?.[1] as RequestInit).body as string) as {
@@ -158,7 +158,7 @@ describe("planTask", () => {
     await mapPage("page", opts(map));
     const say = vi.fn().mockImplementation(async () => reply("Done."));
     await narrate({ kind: "finished", detail: "ok" }, opts(say));
-    expect([level(plan), level(map), level(say)]).toEqual(["high", "minimal", "minimal"]);
+    expect([level(plan), level(map), level(say)]).toEqual(["minimal", "minimal", "minimal"]);
     await mapPage("page", { ...opts(map), thinking: "high" });
     expect(JSON.stringify(map.mock.calls[1]?.[1])).toContain('\\"thinkingLevel\\":\\"high\\"');
   });
