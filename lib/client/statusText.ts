@@ -1,6 +1,24 @@
 import { describeStep } from "./announcements";
 import type { TaskState } from "./taskState";
 
+/** Longest outcome shown whole in the status area; longer answers live in the conversation. */
+export const STATUS_GLANCE_MAX = 160;
+
+/**
+ * The status area is a glance. A long answer ("You can choose bacon, extra cheese… There are 12
+ * fields…") is shortened to its first sentence there; the full text stays in the conversation.
+ */
+export function glance(outcome: string): string {
+  const text = outcome.trim();
+  if (text.length <= STATUS_GLANCE_MAX) return text;
+  const first = /^[\s\S]*?[.!?](?=\s|$)/.exec(text)?.[0] ?? "";
+  const lead =
+    first && first.length <= STATUS_GLANCE_MAX
+      ? first
+      : `${text.slice(0, STATUS_GLANCE_MAX - 1).replace(/\s+\S*$/, "")}…`;
+  return `${lead} The full answer is in the conversation below.`;
+}
+
 /** One plain sentence describing where the task is, for the status area. */
 export function statusSentence(state: TaskState): string {
   if (state.stopping && state.status !== "idle") return "Stopping…";
@@ -29,7 +47,7 @@ export function statusSentence(state: TaskState): string {
     case "awaiting_user":
       return "Your turn: finish the step in the browser window, then press Continue.";
     case "completed":
-      return state.outcome ?? "Done.";
+      return state.outcome ? glance(state.outcome) : "Done.";
     case "failed":
       return state.error?.message ?? "The task stopped because of a problem.";
     case "stopped":

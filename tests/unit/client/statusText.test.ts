@@ -1,4 +1,4 @@
-import { documentTitle, statusSentence } from "@/lib/client/statusText";
+import { STATUS_GLANCE_MAX, documentTitle, glance, statusSentence } from "@/lib/client/statusText";
 import { initialTaskState, type TaskState } from "@/lib/client/taskState";
 import {
   awaitingApproval,
@@ -53,5 +53,27 @@ describe("documentTitle", () => {
     [stopped, "Stopped — AccessPilot"],
   ])("titles the page", (make, title) => {
     expect(documentTitle(make())).toBe(title);
+  });
+});
+
+describe("glance", () => {
+  it("keeps short outcomes exactly as they are", () => {
+    expect(glance("Submitted. Confirmation number 4821.")).toBe(
+      "Submitted. Confirmation number 4821.",
+    );
+  });
+
+  it("shortens a long answer to its first sentence and points to the full answer", () => {
+    const answer =
+      "You can choose bacon, extra cheese, onion, or mushroom as toppings. There are 12 form fields on the whole page. This page is an order form for a pizza, and you can set a delivery time.";
+    expect(glance(answer)).toBe(
+      "You can choose bacon, extra cheese, onion, or mushroom as toppings. The full answer is in the conversation below.",
+    );
+  });
+
+  it("cuts a long first sentence at a word boundary", () => {
+    const result = glance(`${"word ".repeat(60)}end.`);
+    expect(result).toMatch(/^word( word)*… The full answer is in the conversation below\.$/);
+    expect(result.length).toBeLessThan(STATUS_GLANCE_MAX + 60);
   });
 });
