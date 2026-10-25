@@ -881,3 +881,58 @@ describe("questions about the page", () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("naming the field that was typed into", () => {
+  const shot = {
+    imageDataUrl: "data:image/png;base64,AAAA",
+    width: 10,
+    height: 10,
+    coordinateSpace: "viewport-css-pixels" as const,
+  };
+  const form = {
+    url: "http://localhost:4000/s",
+    title: "Form",
+    elements: [
+      {
+        role: "textbox",
+        label: "Full name (required)",
+        bounds: { x: 0, y: 0, width: 100, height: 40 },
+      },
+      { role: "textbox", label: "Email", bounds: { x: 0, y: 100, width: 100, height: 40 } },
+    ],
+  };
+  const view = {
+    open: async () => ({ screenshot: shot, pageContext: form }),
+    observe: async () => ({ screenshot: shot, pageContext: form }),
+  };
+
+  it("says which field it filled, from the field it just clicked, and never the typed text", async () => {
+    const unlabeled = (id: string, text: string) => ({
+      id,
+      type: "type" as const,
+      text,
+      commits: false,
+    });
+    const { deps } = makeDeps(
+      [
+        act(click("c1", 50, 20)),
+        act(unlabeled("t1", "Ada Lovelace")),
+        act(click("c2", 50, 120)),
+        act(unlabeled("t2", "ada@example.com")),
+        done(),
+      ],
+      {},
+      view,
+    );
+    const run = start(deps);
+    await run.finished;
+    const said = run.task.events.flatMap((e) =>
+      e.type === "step.completed" || e.type === "step.started" ? [e.description] : [],
+    );
+    expect(said).toContain("Filled in Full name");
+    expect(said).toContain("Filling in Email");
+    expect(said).not.toContain("Typed your answer");
+    expect(JSON.stringify(run.task.events)).not.toContain("Ada Lovelace");
+    expect(JSON.stringify(run.task.events)).not.toContain("ada@example.com");
+  });
+});
