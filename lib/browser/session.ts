@@ -27,6 +27,8 @@ export interface BrowserSessionOptions {
 /** One isolated, in-memory session. Reuse it for a task, then always close it. */
 export class BrowserSession {
   private closePromise?: Promise<void>;
+  /** Set the moment the page leaves the network policy, before Chromium finishes closing it. */
+  private policyClose = { requested: false };
   private actionPolicy = { enabled: false, approved: false, blocked: false, stopped: false };
 
   private constructor(
@@ -76,6 +78,7 @@ export class BrowserSession {
       const primaryPage = await context.newPage();
       const actionPolicy = { enabled: false, approved: false, blocked: false, stopped: false };
       const redirects = new Map<string, string>();
+      const policyClose = { requested: false };
       await context.route("**/*", async (route) => {
         try {
           const request = route.request();
@@ -150,6 +153,9 @@ export class BrowserSession {
       page.on("framenavigated", (frame) => {
         // Non-network destinations (for example about:blank) do not hit routing.
         if (frame === page.mainFrame() && !policy.allows(frame.url())) {
+          // Closing can take seconds on a busy machine; treat the session as closed right away
+          // so nothing can act on the disallowed page in the meantime.
+          policyClose.requested = true;
           void page.close().catch(() => {});
         }
       });
@@ -158,6 +164,7 @@ export class BrowserSession {
       });
       const session = new BrowserSession(browser, context, page, policy, redirects);
       session.actionPolicy = actionPolicy;
+      session.policyClose = policyClose;
       return session;
     } catch (error) {
       try {
@@ -175,7 +182,12 @@ export class BrowserSession {
   }
 
   get isClosed(): boolean {
-    return Boolean(this.closePromise) || !this.browser.isConnected() || this.activePage.isClosed();
+    return (
+      Boolean(this.closePromise) ||
+      this.policyClose.requested ||
+      !this.browser.isConnected() ||
+      this.activePage.isClosed()
+    );
   }
 
   /** Internal server-side access; callers must not expose this object to models. */

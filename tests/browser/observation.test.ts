@@ -158,8 +158,10 @@ describe("navigation and observation in Chromium", () => {
       await page.evaluate(() => {
         location.href = "about:blank";
       });
-      // Closing can take longer than poll's 1s default on a busy CI runner.
-      await expect.poll(() => page.isClosed(), { timeout: 10_000 }).toBe(true);
+      // The session counts as closed as soon as the disallowed navigation is seen; Chromium can
+      // take many seconds to finish tearing the page down on a busy machine.
+      await expect.poll(() => session.isClosed).toBe(true);
+      expect(() => session.page).toThrow("The browser session is closed.");
     } finally {
       await session.close();
     }
