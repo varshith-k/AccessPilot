@@ -28,7 +28,7 @@ All bodies are JSON (`Content-Type: application/json`). Task ids in paths are UR
 
 | Method & path                 | Request body (schema)                                                     | Success                                                  |
 | ----------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `POST /api/tasks`             | `{ url, goal }` (`startTaskRequestSchema`)                                | `201` or `200`, `{ taskId }` (`startTaskResponseSchema`) |
+| `POST /api/tasks`             | `{ url, goal, details? }` (`startTaskRequestSchema`)                      | `201` or `200`, `{ taskId }` (`startTaskResponseSchema`) |
 | `GET /api/tasks/:id/events`   | none                                                                      | `200`, `text/event-stream` of `TaskEvent`                |
 | `POST /api/tasks/:id/approve` | `{ approvalId }` (`approveRequestSchema`)                                 | `204`                                                    |
 | `POST /api/tasks/:id/deny`    | `{ approvalId, reason? }` (`denyRequestSchema`)                           | `204`                                                    |
@@ -41,6 +41,10 @@ All bodies are JSON (`Content-Type: application/json`). Task ids in paths are UR
   the demo site). URLs with embedded credentials (`https://user:pass@…`) are rejected. Shared
   helper: `isAllowedTaskUrl(url)`.
 - `goal`: trimmed, 1 to 1000 characters (`GOAL_MAX_LENGTH`).
+- `details` (optional, `profileDetailsSchema`): what the user saved under Settings, "Your details":
+  `name` (up to 200), `email` (up to 200), `phone` (up to 50) and free-text `notes` (up to 1000), all
+  optional and trimmed. The backend uses them instead of its demo profile, after removing any line that
+  looks like a password, code or card number. Never send secrets here.
 - `approvalId`: must be the id from the most recent `approval.required` event for that task.
 - `reason` (deny): optional, at most 500 characters. Free text from the user; treat it as untrusted.
 
@@ -257,3 +261,4 @@ Changes the frontend made to the original spec, with reasons:
 | 2026-10-24 | `approval.required` is accepted before any `page.map` or `step.started`.                                                                                            | A safety-critical question must never be dropped silently because it arrived early.                                                                                         |
 | 2026-10-24 | `url` rejects whitespace, zero-width and other invisible characters, `%` in the host, and hosts without a dot (except localhost). `goal` must contain visible text. | User testing found addresses that browsers silently rewrote (`https://exa<U+200B>mple.com` became `example.com`), so the opened address differed from the one the user saw. |
 | 2026-10-24 | Defined how failed `approve`/`deny`/`resume`/`stop` and a failed start are handled (see "How the frontend reacts to failed actions").                               | User testing with a backend returning 404s left users trapped in the approval dialog.                                                                                       |
+| 2026-10-25 | Added optional `details` to `POST /api/tasks`.                                                                                                                      | Lets users fill forms with their own details (Settings, "Your details") instead of the built-in demo profile. Optional, so older clients are unaffected.                    |

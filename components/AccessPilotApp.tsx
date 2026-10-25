@@ -22,6 +22,7 @@ import { AnnouncerProvider, useAnnouncer } from "@/hooks/useAnnouncer";
 import { useFocusRescue } from "@/hooks/useFocusRescue";
 import { SHORTCUT_LABELS, useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useSettings } from "@/hooks/useSettings";
+import { profileForTask, profileStore } from "@/lib/client/profile";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useStickyFits } from "@/hooks/useStickyFits";
@@ -415,6 +416,12 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     focusComposer();
   };
 
+  // The details saved in Settings travel with each new task; nothing is sent when they are empty.
+  const withDetails = (input: StartTaskRequest): StartTaskRequest => {
+    const details = profileForTask(profileStore.getSnapshot());
+    return details ? { ...input, details } : input;
+  };
+
   const start = (input: StartTaskRequest) => {
     if (!settings.firstRunDone && speech.supported && !tipShown.current) {
       tipShown.current = true;
@@ -423,11 +430,11 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         "polite",
       );
     }
-    void session.start(input);
+    void session.start(withDetails(input));
   };
 
   const sendFollowUp = (text: string) => {
-    const result = session.sendFollowUp(text, url);
+    const result = session.sendFollowUp(text, url, profileForTask(profileStore.getSnapshot()));
     if (result.ok) setGoal(text.trim());
     return result;
   };
@@ -707,7 +714,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                     {state.error.recoverable && state.request && (
                       <button
                         type="button"
-                        onClick={() => void session.retry()}
+                        onClick={() => state.request && start(state.request)}
                         className={buttonStyles.primary}
                       >
                         Try again

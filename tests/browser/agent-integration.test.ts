@@ -300,3 +300,40 @@ describe("keeping the window open for review", () => {
     await expect(driver.observe()).rejects.toThrow();
   });
 });
+
+describe("whole-page outline", () => {
+  it("lists every field on the page, including ones below the fold, and never their values", async () => {
+    const server = createDemoServer();
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/scholarship`;
+    const driver = await createRealBrowserFactory()();
+    try {
+      const first = await driver.open(url);
+      await driver.execute({
+        id: "t1",
+        type: "click",
+        x: 640,
+        y: 346,
+        commits: false,
+        ...(first.observationId ? { observationId: first.observationId } : {}),
+      });
+      await driver.execute({ id: "t2", type: "type", text: "Private Value 123", commits: false });
+      const outline = await driver.outline!();
+      expect(outline).toContain("Form fields on the whole page (5):");
+      for (const label of [
+        "Full name",
+        "Email",
+        "Program",
+        "Start date",
+        "Why do you deserve this scholarship?",
+      ]) {
+        expect(outline).toContain(label);
+      }
+      expect(outline).toContain("Submit application"); // below the fold, but listed
+      expect(outline).not.toContain("Private Value 123");
+    } finally {
+      await driver.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});

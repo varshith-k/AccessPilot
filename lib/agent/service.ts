@@ -1,4 +1,5 @@
 import { AgentError } from "./errors";
+import { sanitizeDetails } from "./sensitive";
 import { runTask } from "./orchestrator";
 import { TaskStore } from "./taskStore";
 import { DEFAULT_LIMITS, type AgentDeps, type AgentLimits } from "./types";
@@ -20,14 +21,19 @@ export class TaskService {
 
   constructor(private readonly options: TaskServiceOptions) {}
 
-  start(input: { url: string; goal: string }): { taskId: string } {
+  start(input: { url: string; goal: string; details?: Record<string, string | undefined> }): {
+    taskId: string;
+  } {
     if (this.store.activeCount() >= (this.options.maxConcurrent ?? 2)) {
       throw new AgentError(
         "invalid_state",
         "AccessPilot is already busy with other tasks. Please wait for one to finish, then try again.",
       );
     }
-    const deps = this.options.getDeps();
+    let deps = this.options.getDeps();
+    // Details the user saved replace the built-in demo profile, after anything secret is removed.
+    const details = input.details ? sanitizeDetails(input.details) : {};
+    if (Object.keys(details).length > 0) deps = { ...deps, userDetails: details };
     const task = this.store.create(input.url, input.goal);
 
     const deadline = setTimeout(
@@ -36,9 +42,12 @@ export class TaskService {
     );
     deadline.unref?.();
 
-    void runTask(deps, task, input, this.options.limits ?? DEFAULT_LIMITS).finally(() =>
-      clearTimeout(deadline),
-    );
+    void runTask(
+      deps,
+      task,
+      { url: input.url, goal: input.goal },
+      this.options.limits ?? DEFAULT_LIMITS,
+    ).finally(() => clearTimeout(deadline));
     return { taskId: task.id };
   }
 

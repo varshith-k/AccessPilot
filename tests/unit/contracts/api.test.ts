@@ -144,3 +144,25 @@ describe("apiPaths", () => {
     expect(apiPaths.stop("a/b?c")).toBe("/api/tasks/a%2Fb%3Fc/stop");
   });
 });
+
+describe("startTaskRequestSchema details", () => {
+  const base = { url: "https://example.com", goal: "Apply" };
+
+  it("accepts optional, trimmed profile details", () => {
+    const parsed = startTaskRequestSchema.parse({
+      ...base,
+      details: { name: "  Ada  ", notes: "CS" },
+    });
+    expect(parsed.details).toEqual({ name: "Ada", notes: "CS" });
+    expect(startTaskRequestSchema.parse(base).details).toBeUndefined();
+  });
+
+  it("rejects details that are too long", () => {
+    expect(
+      startTaskRequestSchema.safeParse({ ...base, details: { notes: "x".repeat(1001) } }).success,
+    ).toBe(false);
+    expect(
+      startTaskRequestSchema.safeParse({ ...base, details: { name: "x".repeat(201) } }).success,
+    ).toBe(false);
+  });
+});

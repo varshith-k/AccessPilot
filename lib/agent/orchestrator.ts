@@ -113,7 +113,9 @@ function humanize(key: string): string {
 
 /** Limits so the goal stays under what the action provider accepts, whatever the profile holds. */
 const MAX_DETAILS_CHARS = 1200;
-const MAX_VALUE_CHARS = 400;
+const MAX_VALUE_CHARS = 1000;
+/** Twinly accepts goals up to 2000 characters; leave a margin. */
+const MAX_GOAL_CHARS = 1900;
 
 /**
  * The goal as the action provider sees it: the user's request plus the details they have approved
@@ -124,21 +126,21 @@ const MAX_VALUE_CHARS = 400;
 export function composeGoal(goal: string, userDetails?: Record<string, string>): string {
   const lines: string[] = [];
   let used = 0;
+  const header =
+    "\n\nDetails the user has approved for this task. Use only these, and do not make up any others:\n";
+  const budget = Math.min(MAX_DETAILS_CHARS, MAX_GOAL_CHARS - goal.length - header.length);
   for (const [key, value] of Object.entries(userDetails ?? {})) {
     const trimmed = value.trim();
     if (!trimmed || isSensitiveKey(key)) continue;
     const shown =
       trimmed.length > MAX_VALUE_CHARS ? `${trimmed.slice(0, MAX_VALUE_CHARS)}…` : trimmed;
     const line = `- ${humanize(key)}: ${shown}`;
-    if (used + line.length > MAX_DETAILS_CHARS) continue; // skip what does not fit, keep the rest
+    if (used + line.length + 1 > budget) continue; // skip what does not fit, keep the rest
     lines.push(line);
-    used += line.length;
+    used += line.length + 1;
   }
   if (lines.length === 0) return goal;
-  return `${goal}
-
-Details the user has approved for this task. Use only these, and do not make up any others:
-${lines.join("\n")}`;
+  return `${goal}${header}${lines.join("\n")}`;
 }
 
 export interface RunInput {
@@ -282,6 +284,35 @@ export async function runTask(
     if (plan.clarifyingQuestion) {
       fail("needs_clarification", plan.clarifyingQuestion, true);
       return;
+    }
+
+    // A question about the page ("how many fields are there?") is answered, not acted on. The model
+    // sees an outline of the whole page, not just the part in view. If answering fails, fall through
+    // and let the action provider work on it as usual.
+    if (plan.intent === "explain_page" && deps.planner.explainPage) {
+      let outline = pageText;
+      try {
+        if (browser.outline) {
+          // The outline covers the whole page's structure; the page text adds what the paragraphs
+          // say (a deadline, a fee), which questions usually need.
+          const text = obs.pageContext.text;
+          outline = neutralize(
+            `${await guard(browser.outline())}${text ? `\n\nPage text:\n${text}` : ""}`,
+          );
+        }
+      } catch (error) {
+        if (error instanceof AbortedError) throw error;
+      }
+      let answer = "";
+      try {
+        answer = (await guard(deps.planner.explainPage(outline, input.goal))).trim();
+      } catch (error) {
+        if (error instanceof AbortedError) throw error;
+      }
+      if (answer) {
+        ctl.emit({ type: "task.completed", summary: answer });
+        return;
+      }
     }
     await say({ kind: "started", detail: plan.summary }, plan.summary);
 

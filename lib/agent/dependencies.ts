@@ -1,4 +1,4 @@
-import { mapPage, narrate, planTask } from "@/lib/ai";
+import { explainPage, mapPage, narrate, planTask } from "@/lib/ai";
 import { createTwinlyClientFromEnv, isTwinlyError } from "@/lib/twinly/client";
 import { AgentError } from "./errors";
 import { createTwinlyActions } from "./twinlyActions";
@@ -7,7 +7,12 @@ import { SCHOLARSHIP_STEPS, createFakeDeps, createLabelDrivenActions } from "./f
 import type { AgentDeps, Planner } from "./types";
 
 /** Real Gemma 4 for planning, page maps and narration. Needs `GEMINI_API_KEY` on the server. */
-const gemmaPlanner: Planner = { planTask, mapPage, narrate };
+const gemmaPlanner: Planner = {
+  planTask,
+  mapPage,
+  narrate,
+  explainPage: (pageText, question) => explainPage(pageText, question),
+};
 
 function fakeDelay(): { stepDelayMs: number } | Record<string, never> {
   const raw = process.env.ACCESSPILOT_FAKE_DELAY_MS;

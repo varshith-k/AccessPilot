@@ -61,7 +61,11 @@ export interface TaskSession {
    * Sends a typed or spoken follow-up. When nothing is running it starts a new task with the
    * last task's URL, or with `fallbackUrl` (the form's address) if there was no task yet.
    */
-  sendFollowUp(text: string, fallbackUrl?: string): FollowUpResult;
+  sendFollowUp(
+    text: string,
+    fallbackUrl?: string,
+    details?: StartTaskRequest["details"],
+  ): FollowUpResult;
   dismissWarning(id: string): void;
   /**
    * Re-reads what matters most right now: the open approval question, the hand-off
@@ -325,7 +329,7 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
   }, [dispatch]);
 
   const sendFollowUp = useCallback(
-    (text: string, fallbackUrl?: string): FollowUpResult => {
+    (text: string, fallbackUrl?: string, details?: StartTaskRequest["details"]): FollowUpResult => {
       if (text.trim() === "") return { ok: false, reason: "empty" };
       const { status: current, request } = stateRef.current;
       if (isActiveStatus(current)) return { ok: false, reason: "busy" };
@@ -351,7 +355,7 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
         url = parsed.data;
       }
       if (url === undefined) return { ok: false, reason: "no_url" };
-      void start({ url, goal: goal.data });
+      void start(details ? { url, goal: goal.data, details } : { url, goal: goal.data });
       return { ok: true };
     },
     [start],

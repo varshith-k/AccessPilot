@@ -4,6 +4,7 @@ import { useId } from "react";
 import type { ThemePreference } from "@/lib/client/theme";
 import { MonitorIcon, MoonIcon, SunIcon } from "./ui/icons";
 import { ModalDialog } from "./ui/ModalDialog";
+import { ProfileSection } from "./ProfileSection";
 import { SettingsPanel, type SettingsPanelProps } from "./SettingsPanel";
 import { buttonStyles } from "./ui/styles";
 
@@ -76,6 +77,7 @@ export function SettingsDialog({
     >
       <ThemeChooser theme={theme} onChange={onThemeChange} />
       <SettingsPanel {...panel} />
+      <ProfileSection />
     </ModalDialog>
   );
 }
