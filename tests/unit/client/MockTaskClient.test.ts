@@ -1,7 +1,11 @@
 import { taskEventSchema, type TaskEvent } from "@/lib/contracts";
 import { MockTaskClient } from "@/lib/client/MockTaskClient";
 import { TaskClientError } from "@/lib/client/errors";
-import { MOCK_SCENARIO_NAMES, type MockScenarioName } from "@/lib/client/mock/scenarios";
+import {
+  DEMO_FOLLOW_UP_SUMMARY,
+  MOCK_SCENARIO_NAMES,
+  type MockScenarioName,
+} from "@/lib/client/mock/scenarios";
 
 const INPUT = {
   url: "http://localhost:4000/scholarship",
@@ -112,9 +116,44 @@ describe("MockTaskClient scenarios", () => {
     await settled(client.deny(taskId, approval.approvalId, "Wrong program"));
     const after = events.slice(count);
     expect(types(after)).toEqual(["narration", "task.completed"]);
-    expect(after[0]).toMatchObject({ text: expect.stringContaining("did not submit") });
-    expect(after[1]).toMatchObject({ summary: expect.stringMatching(/^Not submitted/) });
+    expect(after[0]).toMatchObject({ text: "Okay, I won't do that." });
+    expect(after[1]).toMatchObject({
+      summary: expect.stringMatching(/^Not done: Submit application\. I stopped there/),
+    });
     expect(after.some((e) => e.type === "step.completed" && e.step === 6)).toBe(false);
+  });
+
+  it("a follow-up with a different goal gets a demo notice instead of replaying the form", async () => {
+    const { client, taskId, events } = await startScenario("scholarship-happy");
+    await settle();
+    const approval = events.at(-1);
+    if (approval?.type !== "approval.required") throw new Error("expected approval");
+    await settled(client.approve(taskId, approval.approvalId));
+
+    const followUp = await settled(client.start({ ...INPUT, goal: "Now find the deadline" }));
+    const after: TaskEvent[] = [];
+    client.subscribe(
+      followUp.taskId,
+      (event) => after.push(event),
+      () => undefined,
+    );
+    await settle();
+    expect(types(after)).toEqual(["task.started", "narration", "task.completed"]);
+    expect(after.at(-1)).toMatchObject({ summary: DEMO_FOLLOW_UP_SUMMARY });
+    expect(after.some((event) => event.type === "approval.required")).toBe(false);
+  });
+
+  it("starting again with the original goal replays the scripted example", async () => {
+    const { client } = await startScenario("scholarship-happy");
+    const again = await settled(client.start({ ...INPUT, goal: `  ${INPUT.goal.toUpperCase()} ` }));
+    const after: TaskEvent[] = [];
+    client.subscribe(
+      again.taskId,
+      (event) => after.push(event),
+      () => undefined,
+    );
+    await settle();
+    expect(after.at(-1)?.type).toBe("approval.required");
   });
 
   it("password-handoff: waits for resume after asking for the password", async () => {

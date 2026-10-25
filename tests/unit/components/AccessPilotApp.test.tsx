@@ -130,7 +130,16 @@ describe("AccessPilotApp", () => {
     await user.click(screen.getByRole("button", { name: "Start a different task" }));
     expect(screen.getByText(/^Ready\./)).toBeVisible();
     expect(screen.getByRole("heading", { name: "Start a task" })).toHaveFocus();
+    // A different task starts with an empty goal; the website address is kept.
+    expect(screen.getByRole("textbox", { name: "What do you want to get done?" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Website address" })).toHaveValue(
+      "http://localhost:4000/scholarship",
+    );
 
+    await user.type(
+      screen.getByRole("textbox", { name: "What do you want to get done?" }),
+      "Help me complete this scholarship application.",
+    );
     await user.click(screen.getByRole("button", { name: "Start task" }));
     await flush();
     await user.click(screen.getByRole("button", { name: "Try again" }));
@@ -142,7 +151,7 @@ describe("AccessPilotApp", () => {
     await flush();
     await user.keyboard("{Escape}");
     await flush();
-    expect(screen.getByText(/^Not submitted/, { selector: "p.text-lg" })).toBeVisible();
+    expect(screen.getByText(/^Not done/, { selector: "p.text-lg" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Start a new task" }));
     expect(screen.getByText(/^Ready\./)).toBeVisible();
   });

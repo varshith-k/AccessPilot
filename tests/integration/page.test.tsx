@@ -120,7 +120,7 @@ describe("AccessPilot page (integration, MockTaskClient)", () => {
     await user.keyboard("{Escape}");
     expect(deny).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).toBeNull();
-    await advanceUntil(() => assertive().startsWith("Not submitted."));
+    await advanceUntil(() => assertive().startsWith("Not done:"));
     expect(approve).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Start a new task" })).toBeVisible();
   });

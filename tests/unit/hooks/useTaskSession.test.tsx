@@ -160,7 +160,7 @@ describe("useTaskSession with MockTaskClient", () => {
     });
     await flush();
     expect(result.current.state.status).toBe("completed");
-    expect(result.current.state.outcome).toMatch(/^Not submitted/);
+    expect(result.current.state.outcome).toMatch(/^Not done/);
     expect(result.current.state.steps.find((s) => s.step === 6)?.status).toBe("incomplete");
   });
 

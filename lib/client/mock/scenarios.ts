@@ -211,16 +211,13 @@ function scholarshipSubmit(program: string): ScriptStep[] {
           summary: "Submitted. Confirmation number 4821.",
         }),
       ],
+      // Same wording as the orchestrator's finishDenied (lib/agent/orchestrator.ts).
       deny: [
-        emit(600, {
-          type: "narration",
-          text: "Okay, I did not submit. Your answers are still filled in.",
-          priority: "polite",
-        }),
+        emit(600, { type: "narration", text: "Okay, I won't do that.", priority: "polite" }),
         emit(PACE, {
           type: "task.completed",
           summary:
-            "Not submitted. Your answers are still filled in, so you can fix them and submit when you're ready.",
+            "Not done: Submit application. I stopped there, so nothing was submitted or changed.",
         }),
       ],
     },
@@ -436,6 +433,23 @@ const slowNetwork: MockScenario = {
     }),
   ],
 };
+
+export const DEMO_FOLLOW_UP_SUMMARY =
+  "Demo mode only plays its scripted example, so it can't do that. Nothing on the page was changed. Start a new task with the original goal to replay the example, or connect the live backend for other requests.";
+
+/**
+ * Played for any goal other than the one the demo first ran (a follow-up such as "Now find the
+ * deadline"). The demo can't act on new requests, so it says so instead of replaying the form
+ * and asking to submit it.
+ */
+export const demoFollowUpScript: ScriptStep[] = [
+  emit(400, {
+    type: "narration",
+    text: "This is demo mode, so I can only play the scripted example.",
+    priority: "polite",
+  }),
+  emit(400, { type: "task.completed", summary: DEMO_FOLLOW_UP_SUMMARY }),
+];
 
 export const mockScenarios: { [N in MockScenarioName]: MockScenario } = {
   "scholarship-happy": scholarshipHappy,

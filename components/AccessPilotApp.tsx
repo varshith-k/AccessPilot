@@ -142,6 +142,13 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
 
   const [url, setUrl] = useState("");
   const [goal, setGoal] = useState("");
+  // Whether the goal box holds a draft the user is still composing. Dictation adds to a draft;
+  // once a task starts with that goal it is no longer a draft, so the next dictation replaces it.
+  const [goalIsDraft, setGoalIsDraft] = useState(true);
+  const editGoal = (value: string) => {
+    setGoal(value);
+    setGoalIsDraft(true);
+  };
   // Words heard during a hand-off may be a spoken password; never echo them on screen.
   const [hideHeard, setHideHeard] = useState(false);
   const statusRef = useRef<HTMLHeadingElement>(null);
@@ -228,6 +235,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     const command = parseVoiceCommand(text, {
       approvalOpen: state.approval !== null,
       handoffActive: state.handoff !== null,
+      taskActive: active,
     });
     switch (command.kind) {
       case "stop":
@@ -235,10 +243,10 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         else reply("Nothing is running.", "polite");
         return;
       case "approve":
-        void session.approve();
+        approve();
         return;
       case "deny":
-        void session.deny("Declined by voice");
+        deny("Declined by voice");
         return;
       case "unclear_approval":
         reply(
@@ -255,7 +263,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         }
         return;
       case "continue":
-        void session.resume();
+        resume();
         return;
       case "no_approval_pending":
         reply("There's nothing waiting for your approval right now.", "polite");
@@ -268,7 +276,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         return;
       case "clear_goal":
         if (active) break;
-        setGoal("");
+        editGoal("");
         reply("Cleared the goal box.", "polite");
         return;
       case "none":
@@ -296,8 +304,8 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
       reply(`Put ${spokenUrl} in the website address box.`, "polite");
       return;
     }
-    const added = goal.trim() !== "";
-    setGoal(added ? `${goal.trim()} ${command.text}` : command.text);
+    const added = goalIsDraft && goal.trim() !== "";
+    editGoal(added ? `${goal.trim()} ${command.text}` : command.text);
     reply(
       added
         ? `Added to the goal: ${command.text}. Say “start task” or press Start task when it's ready, or say “clear the goal” to start over.`
@@ -350,6 +358,21 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     }
     if (!recognition.listening) cancelSpeech();
     recognition.toggle();
+  };
+
+  // Answering a question from the Browser tab on a phone returns to the conversation, where the
+  // outcome appears and where focus goes when the dialog or hand-off panel closes.
+  const approve = () => {
+    setChosenPane("chat");
+    void session.approve();
+  };
+  const deny = (reason?: string) => {
+    setChosenPane("chat");
+    void session.deny(reason);
+  };
+  const resume = () => {
+    setChosenPane("chat");
+    void session.resume();
   };
 
   const repeat = () => {
@@ -431,18 +454,26 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         "polite",
       );
     }
+    setGoalIsDraft(false);
     void session.start(withDetails(input));
   };
 
   const sendFollowUp = (text: string) => {
     const result = session.sendFollowUp(text, url, profileForTask(profileStore.getSnapshot()));
-    if (result.ok) setGoal(text.trim());
+    if (result.ok) {
+      setGoal(text.trim());
+      setGoalIsDraft(false);
+    }
     return result;
   };
 
   const { reset: resetSession } = session;
+  // A new task keeps the website address (follow-ups and retries use the same site, and it is
+  // easy to change) but starts with an empty goal.
   const startOver = useCallback(() => {
     resetSession();
+    setGoal("");
+    setGoalIsDraft(true);
     focusComposer();
   }, [resetSession, focusComposer]);
 
@@ -472,7 +503,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
   );
 
   const suggest = (text: string) => {
-    setGoal(text);
+    editGoal(text);
     announce(`Goal filled in: ${text} Add the website address, then press Start task.`, "polite");
   };
 
@@ -510,7 +541,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
           url={url}
           goal={goal}
           onUrlChange={setUrl}
-          onGoalChange={setGoal}
+          onGoalChange={editGoal}
           onSubmit={start}
           starting={state.status === "starting"}
           busy={active}
@@ -683,11 +714,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
               </section>
 
               {state.handoff && (
-                <HandoffPanel
-                  handoff={state.handoff}
-                  onContinue={() => void session.resume()}
-                  onStop={stop}
-                />
+                <HandoffPanel handoff={state.handoff} onContinue={resume} onStop={stop} />
               )}
 
               <WarningList warnings={state.warnings} onDismiss={session.dismissWarning} />
@@ -769,8 +796,8 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
 
       <ApprovalDialog
         approval={state.approval}
-        onApprove={() => void session.approve()}
-        onDeny={() => void session.deny()}
+        onApprove={approve}
+        onDeny={() => deny()}
         returnFocusRef={statusRef}
         voiceHint={
           recognition.supported

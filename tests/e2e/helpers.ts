@@ -5,7 +5,12 @@ export type Scenario =
   "scholarship-happy" | "scholarship-deny" | "password-handoff" | "failure" | "slow-network";
 
 /** Opens the app on a mock scenario played 20x faster, with the first-run question answered. */
-export async function openScenario(page: Page, scenario: Scenario, { firstRun = false } = {}) {
+/** Opens the app on a mock scenario. `speed` scales scripted delays (default: 20x faster). */
+export async function openScenario(
+  page: Page,
+  scenario: Scenario,
+  { firstRun = false, speed = 0.05 } = {},
+) {
   if (!firstRun) {
     await page.addInitScript(() => {
       window.localStorage.setItem(
@@ -14,7 +19,7 @@ export async function openScenario(page: Page, scenario: Scenario, { firstRun = 
       );
     });
   }
-  await page.goto(`/?mock=${scenario}&mockSpeed=0.05`);
+  await page.goto(`/?mock=${scenario}&mockSpeed=${speed}`);
   await expect(page.getByRole("heading", { level: 1, name: "AccessPilot" })).toBeVisible();
   // The microphone button only renders once React has hydrated, so shortcuts and handlers work.
   await expect(page.getByRole("button", { name: /^Microphone/ })).toBeVisible();

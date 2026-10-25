@@ -135,7 +135,7 @@ describe("AccessPilotApp voice", () => {
     speak("don't submit");
     expect(deny).toHaveBeenCalledWith(expect.any(String), "approval-submit", "Declined by voice");
     await flush();
-    expect(screen.getByText(/^Not submitted/, { selector: "p.text-lg" })).toBeVisible();
+    expect(screen.getByText(/^Not done/, { selector: "p.text-lg" })).toBeVisible();
   });
 
   it('"stop" by voice stops the task and silences speech', async () => {

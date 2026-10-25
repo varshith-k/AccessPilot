@@ -3,6 +3,8 @@ import { normalizeTranscript, parseVoiceCommand } from "@/lib/client/voiceComman
 const idle = { approvalOpen: false, handoffActive: false };
 const approval = { approvalOpen: true, handoffActive: false };
 const handoff = { approvalOpen: false, handoffActive: true };
+const running = { approvalOpen: false, handoffActive: false, taskActive: true };
+const nothingRunning = { approvalOpen: false, handoffActive: false, taskActive: false };
 
 describe("normalizeTranscript", () => {
   it("lowercases, straightens apostrophes, and drops punctuation", () => {
@@ -23,6 +25,27 @@ describe("parseVoiceCommand", () => {
     ] as const)("%s", (text, context) => {
       expect(parseVoiceCommand(text, context)).toEqual({ kind: "stop" });
     });
+
+    it("stops a running task even when stop is mid-sentence", () => {
+      expect(parseVoiceCommand("help me stop my subscription", running)).toEqual({
+        kind: "stop",
+      });
+      expect(parseVoiceCommand("wait stop that", running)).toEqual({ kind: "stop" });
+    });
+
+    it.each(["stop", "Stop!", "stop it", "please stop", "okay stop now", "stop the task"])(
+      "with nothing running, the whole phrase %s still means stop",
+      (text) => {
+        expect(parseVoiceCommand(text, nothingRunning)).toEqual({ kind: "stop" });
+      },
+    );
+
+    it.each(["help me stop my subscription", "find the bus stop", "Stop my newsletter emails"])(
+      "with nothing running, %s is a goal, not a command",
+      (text) => {
+        expect(parseVoiceCommand(text, nothingRunning)).toEqual({ kind: "none", text });
+      },
+    );
 
     it("does not match words that merely contain stop", () => {
       expect(parseVoiceCommand("unstoppable", idle).kind).toBe("none");
