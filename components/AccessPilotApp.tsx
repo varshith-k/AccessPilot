@@ -13,6 +13,7 @@ import { parseVoiceCommand } from "@/lib/client/voiceCommands";
 import { AnnouncerProvider, useAnnouncer } from "@/hooks/useAnnouncer";
 import { SHORTCUT_LABELS, useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useSettings } from "@/hooks/useSettings";
+import { profileForTask, profileStore } from "@/lib/client/profile";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useStillWorking } from "@/hooks/useStillWorking";
@@ -282,7 +283,11 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     focusComposer();
   };
 
-  const start = (input: StartTaskRequest) => void session.start(input);
+  // The details saved in Settings travel with each new task; nothing is sent when they are empty.
+  const start = (input: StartTaskRequest) => {
+    const details = profileForTask(profileStore.getSnapshot());
+    void session.start(details ? { ...input, details } : input);
+  };
 
   const { reset: resetSession } = session;
   const startOver = useCallback(() => {

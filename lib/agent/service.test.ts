@@ -231,3 +231,66 @@ describe("createLabelDrivenActions", () => {
     expect(last).toMatchObject({ kind: "fail" });
   });
 });
+
+describe("the user's own details", () => {
+  it("replace the demo profile, with anything secret removed before it reaches the models", async () => {
+    let seenGoal = "";
+    let plannedWith: Record<string, string> | undefined;
+    const service = new TaskService({
+      getDeps: () => {
+        const { deps } = makeDeps([done()]);
+        const plan = deps.planner.planTask;
+        deps.planner.planTask = async (goal, page, details) => {
+          plannedWith = details;
+          return plan(goal, page, details);
+        };
+        deps.actions.nextAction = async (input) => {
+          seenGoal = input.goal;
+          return done();
+        };
+        return deps;
+      },
+    });
+    const { taskId } = service.start({
+      url: "http://localhost:4000/s",
+      goal: "Apply",
+      details: {
+        name: "Ada Lovelace",
+        email: "",
+        notes: "Program: Mathematics\nMy password is hunter2\nCard 4242 4242 4242 4242",
+      },
+    });
+    const events: TaskEvent[] = [];
+    service.subscribe(taskId, 0, (e) => events.push(e));
+    await vi.waitFor(() => expect(events.at(-1)?.type).toBe("task.completed"));
+
+    expect(seenGoal).toContain("Ada Lovelace");
+    expect(seenGoal).toContain("Program: Mathematics");
+    expect(seenGoal).not.toContain("Alex Morgan");
+    for (const secret of ["hunter2", "4242"]) expect(seenGoal).not.toContain(secret);
+    expect(plannedWith).toEqual({ name: "Ada Lovelace", notes: "Program: Mathematics" });
+  });
+
+  it("leave the demo profile in place when nothing is filled in", async () => {
+    let seenGoal = "";
+    const service = new TaskService({
+      getDeps: () => {
+        const { deps } = makeDeps([done()]);
+        deps.actions.nextAction = async (input) => {
+          seenGoal = input.goal;
+          return done();
+        };
+        return deps;
+      },
+    });
+    const { taskId } = service.start({
+      url: "http://localhost:4000/s",
+      goal: "Apply",
+      details: { name: "  " },
+    });
+    const events: TaskEvent[] = [];
+    service.subscribe(taskId, 0, (e) => events.push(e));
+    await vi.waitFor(() => expect(events.at(-1)?.type).toBe("task.completed"));
+    expect(seenGoal).toContain("Alex Morgan");
+  });
+});

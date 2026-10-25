@@ -80,3 +80,27 @@ export function maskIfSensitive(label: string, value: string): string {
 export function isSensitiveKey(key: string): boolean {
   return SECRET.test(key.replace(/[_-]+/g, " ")) || CAPTCHA.test(key);
 }
+
+/** A run of 13 to 19 digits, optionally spaced or dashed, anywhere in a line: looks like a card number. */
+const CARD_IN_TEXT = /(?:\d[ -]?){13,19}/;
+
+/**
+ * The user's saved details, minus anything that must never leave the server: keys that look like a
+ * password or card field are dropped, and any line of free text that mentions a password, code or
+ * card, or contains a card-like number, is removed. Empty values are dropped too.
+ */
+export function sanitizeDetails(
+  details: Record<string, string | undefined>,
+): Record<string, string> {
+  const clean: Record<string, string> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (!value || isSensitiveKey(key)) continue;
+    const kept = value
+      .split(/\r?\n/)
+      .filter((line) => !SECRET.test(line) && !CAPTCHA.test(line) && !CARD_IN_TEXT.test(line))
+      .join("\n")
+      .trim();
+    if (kept) clean[key] = kept;
+  }
+  return clean;
+}

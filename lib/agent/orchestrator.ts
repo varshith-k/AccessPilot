@@ -100,7 +100,9 @@ function humanize(key: string): string {
 
 /** Limits so the goal stays under what the action provider accepts, whatever the profile holds. */
 const MAX_DETAILS_CHARS = 1200;
-const MAX_VALUE_CHARS = 400;
+const MAX_VALUE_CHARS = 1000;
+/** Twinly accepts goals up to 2000 characters; leave a margin. */
+const MAX_GOAL_CHARS = 1900;
 
 /**
  * The goal as the action provider sees it: the user's request plus the details they have approved
@@ -111,21 +113,21 @@ const MAX_VALUE_CHARS = 400;
 export function composeGoal(goal: string, userDetails?: Record<string, string>): string {
   const lines: string[] = [];
   let used = 0;
+  const header =
+    "\n\nDetails the user has approved for this task. Use only these, and do not make up any others:\n";
+  const budget = Math.min(MAX_DETAILS_CHARS, MAX_GOAL_CHARS - goal.length - header.length);
   for (const [key, value] of Object.entries(userDetails ?? {})) {
     const trimmed = value.trim();
     if (!trimmed || isSensitiveKey(key)) continue;
     const shown =
       trimmed.length > MAX_VALUE_CHARS ? `${trimmed.slice(0, MAX_VALUE_CHARS)}…` : trimmed;
     const line = `- ${humanize(key)}: ${shown}`;
-    if (used + line.length > MAX_DETAILS_CHARS) continue; // skip what does not fit, keep the rest
+    if (used + line.length + 1 > budget) continue; // skip what does not fit, keep the rest
     lines.push(line);
-    used += line.length;
+    used += line.length + 1;
   }
   if (lines.length === 0) return goal;
-  return `${goal}
-
-Details the user has approved for this task. Use only these, and do not make up any others:
-${lines.join("\n")}`;
+  return `${goal}${header}${lines.join("\n")}`;
 }
 
 export interface RunInput {

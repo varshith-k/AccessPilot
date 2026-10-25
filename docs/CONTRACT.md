@@ -28,7 +28,7 @@ All bodies are JSON (`Content-Type: application/json`). Task ids in paths are UR
 
 | Method & path                 | Request body (schema)                                                     | Success                                                  |
 | ----------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `POST /api/tasks`             | `{ url, goal }` (`startTaskRequestSchema`)                                | `201` or `200`, `{ taskId }` (`startTaskResponseSchema`) |
+| `POST /api/tasks`             | `{ url, goal, details? }` (`startTaskRequestSchema`)                      | `201` or `200`, `{ taskId }` (`startTaskResponseSchema`) |
 | `GET /api/tasks/:id/events`   | none                                                                      | `200`, `text/event-stream` of `TaskEvent`                |
 | `POST /api/tasks/:id/approve` | `{ approvalId }` (`approveRequestSchema`)                                 | `204`                                                    |
 | `POST /api/tasks/:id/deny`    | `{ approvalId, reason? }` (`denyRequestSchema`)                           | `204`                                                    |
@@ -41,6 +41,10 @@ All bodies are JSON (`Content-Type: application/json`). Task ids in paths are UR
   the demo site). URLs with embedded credentials (`https://user:pass@…`) are rejected. Shared
   helper: `isAllowedTaskUrl(url)`.
 - `goal`: trimmed, 1 to 1000 characters (`GOAL_MAX_LENGTH`).
+- `details` (optional, `profileDetailsSchema`): what the user saved under Settings, "Your details":
+  `name` (up to 200), `email` (up to 200), `phone` (up to 50) and free-text `notes` (up to 1000), all
+  optional and trimmed. The backend uses them instead of its demo profile, after removing any line that
+  looks like a password, code or card number. Never send secrets here.
 - `approvalId`: must be the id from the most recent `approval.required` event for that task.
 - `reason` (deny): optional, at most 500 characters. Free text from the user; treat it as untrusted.
 
@@ -225,13 +229,14 @@ The UI enforces its side, but these are backend guarantees:
 
 Changes the frontend made to the original spec, with reasons:
 
-| Date       | Change                                                                                                            | Rationale                                                                                                                                  |
-| ---------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2026-10-24 | Added optional `totalSteps` to `step.started`.                                                                    | The progress UI needs "Step 3 of about 6" and a `<progress>` bar. Optional, so the backend can omit it when it doesn't know.               |
-| 2026-10-24 | Defined the error body `{ error: { code, message } }` for non-2xx responses.                                      | Lets the client raise typed errors and show a helpful message instead of a bare status code.                                               |
-| 2026-10-24 | Defined SSE framing: one JSON `data:` line, `id:` = `seq`, no `event:` name, close after a terminal event.        | Makes `Last-Event-ID` reconnect work and keeps server and client parsing identical.                                                        |
-| 2026-10-24 | `url` must be `https:`, or `http:` on localhost / 127.0.0.1 / [::1], with no embedded credentials.                | Same rule in the form and the API (`taskUrlSchema`), so the user gets the error before a round trip. Loopback IPs added for the demo site. |
-| 2026-10-24 | `goal` limited to 1000 characters. `deny.reason` limited to 500.                                                  | Bounds what reaches the model prompt.                                                                                                      |
-| 2026-10-24 | Text fields must be non-empty after trimming. `screenshot.step` may be 0. `imageDataUrl` must have a base64 body. | Empty narration or alt text is useless to a screen reader user. Step 0 covers the initial page screenshot.                                 |
-| 2026-10-24 | Unknown fields are stripped, not rejected.                                                                        | Lets the backend add fields without coordinating a frontend release.                                                                       |
-| 2026-10-24 | Reconnects send `?lastEventId=<seq>` on the events URL.                                                           | The client controls its own backoff, so it opens a new `EventSource`, and a new one can't send the `Last-Event-ID` header.                 |
+| Date       | Change                                                                                                            | Rationale                                                                                                                                                |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-24 | Added optional `totalSteps` to `step.started`.                                                                    | The progress UI needs "Step 3 of about 6" and a `<progress>` bar. Optional, so the backend can omit it when it doesn't know.                             |
+| 2026-10-24 | Defined the error body `{ error: { code, message } }` for non-2xx responses.                                      | Lets the client raise typed errors and show a helpful message instead of a bare status code.                                                             |
+| 2026-10-24 | Defined SSE framing: one JSON `data:` line, `id:` = `seq`, no `event:` name, close after a terminal event.        | Makes `Last-Event-ID` reconnect work and keeps server and client parsing identical.                                                                      |
+| 2026-10-24 | `url` must be `https:`, or `http:` on localhost / 127.0.0.1 / [::1], with no embedded credentials.                | Same rule in the form and the API (`taskUrlSchema`), so the user gets the error before a round trip. Loopback IPs added for the demo site.               |
+| 2026-10-24 | `goal` limited to 1000 characters. `deny.reason` limited to 500.                                                  | Bounds what reaches the model prompt.                                                                                                                    |
+| 2026-10-24 | Text fields must be non-empty after trimming. `screenshot.step` may be 0. `imageDataUrl` must have a base64 body. | Empty narration or alt text is useless to a screen reader user. Step 0 covers the initial page screenshot.                                               |
+| 2026-10-24 | Unknown fields are stripped, not rejected.                                                                        | Lets the backend add fields without coordinating a frontend release.                                                                                     |
+| 2026-10-24 | Reconnects send `?lastEventId=<seq>` on the events URL.                                                           | The client controls its own backoff, so it opens a new `EventSource`, and a new one can't send the `Last-Event-ID` header.                               |
+| 2026-10-25 | Added optional `details` to `POST /api/tasks`.                                                                    | Lets users fill forms with their own details (Settings, "Your details") instead of the built-in demo profile. Optional, so older clients are unaffected. |
