@@ -5,6 +5,8 @@
 AccessPilot is a voice-first assistant that completes confusing website tasks for people who use
 screen readers, while keeping them informed and in control.
 
+**Built with Gemma 4 (`gemma-4-26b-a4b-it`)** via the Gemini API for planning, page descriptions, answers and narration, and the **Twinly Computer Use API** for choosing each browser action.
+
 ## Why
 
 Many websites are built for sighted mouse users. Unlabeled buttons, date pickers made of `div`s,
