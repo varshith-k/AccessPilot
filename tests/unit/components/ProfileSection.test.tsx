@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { axe } from "vitest-axe";
 import { ProfileSection } from "@/components/ProfileSection";
 import { PROFILE_STORAGE_KEY, profileStore } from "@/lib/client/profile";
+import { renderWithAnnouncer } from "./helpers";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -11,7 +12,7 @@ beforeEach(() => {
 
 describe("ProfileSection", () => {
   it("has labelled fields, warns against secrets, and passes axe", async () => {
-    const { container } = render(<ProfileSection />);
+    const { container } = renderWithAnnouncer(<ProfileSection />);
     expect(screen.getByRole("heading", { name: "Your details" })).toBeInTheDocument();
     for (const name of ["Full name", "Email", "Phone", "Anything else forms might ask"]) {
       expect(screen.getByLabelText(name)).toBeInTheDocument();
@@ -22,7 +23,7 @@ describe("ProfileSection", () => {
 
   it("saves what is typed in this browser, and clears it", async () => {
     const user = userEvent.setup();
-    render(<ProfileSection />);
+    renderWithAnnouncer(<ProfileSection />);
     await user.type(screen.getByLabelText("Full name"), "Ada Lovelace");
     await user.type(screen.getByLabelText("Anything else forms might ask"), "Program: Mathematics");
     const saved = JSON.parse(window.localStorage.getItem(PROFILE_STORAGE_KEY) ?? "{}");

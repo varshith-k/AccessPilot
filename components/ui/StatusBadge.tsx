@@ -28,15 +28,21 @@ const TONE_CLASS: Record<Tone, string> = {
  */
 export function StatusBadge({
   status,
+  declined = false,
   className = "",
   hidden = true,
 }: {
   status: TaskStatus;
+  /** The user declined the approval, so "Completed" would read as success. */
+  declined?: boolean;
   className?: string;
   /** Hide from assistive technology when the same information is available elsewhere. */
   hidden?: boolean;
 }) {
-  const { label, tone, live } = STATUS[status];
+  const { label, tone, live } =
+    status === "completed" && declined
+      ? { label: "Not submitted", tone: "neutral" as const, live: false }
+      : STATUS[status];
   return (
     <span
       aria-hidden={hidden || undefined}

@@ -122,7 +122,8 @@ export function ApprovalDialog({
             Nothing is submitted until you choose. Pressing Escape means Don&apos;t submit.
             {voiceHint && ` ${voiceHint}`}
           </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          {/* Stays in view at the bottom of the dialog on short screens. */}
+          <div className="sticky -bottom-6 -mx-6 flex flex-col gap-2 border-t border-border bg-elevated px-6 py-4 sm:flex-row sm:justify-end">
             <button type="button" onClick={onDeny} className={buttonStyles.secondary}>
               Don&apos;t submit
             </button>

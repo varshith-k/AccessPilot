@@ -19,7 +19,6 @@ describe("isAllowedTaskUrl", () => {
     "http://[::1]:3001/",
     "https://localhost:8443",
     "https://bücher.example",
-    "https://192.168.1.10/form",
   ])("allows %s", (url) => {
     expect(isAllowedTaskUrl(url)).toBe(true);
   });
@@ -45,6 +44,10 @@ describe("isAllowedTaskUrl", () => {
     // Round 2: percent-encoded hosts decode to a different site than the one shown.
     "https://example.org%2Eevil.com",
     "https://%65xample.org",
+    // Final hunt: private and cloud-metadata addresses are refused up front.
+    "https://192.168.1.10/form",
+    "https://169.254.169.254/latest/meta-data/",
+    "https://10.0.0.5/",
   ])("rejects %s", (url) => {
     expect(isAllowedTaskUrl(url)).toBe(false);
   });

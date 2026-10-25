@@ -16,9 +16,11 @@ export function statusSentence(state: TaskState): string {
       const current = state.steps.find((entry) => entry.step === state.currentStep);
       if (current && state.currentStep !== null) {
         const described = describeStep(state.currentStep, state.totalSteps, current.description);
-        return current.status === "completed"
-          ? `${described} (done). Working on the next step…`
-          : described;
+        if (current.status !== "completed") return described;
+        const last = state.totalSteps !== null && state.currentStep >= state.totalSteps;
+        return last
+          ? `${described} (done). Finishing up…`
+          : `${described} (done). Working on the next step…`;
       }
       return "Working…";
     }
