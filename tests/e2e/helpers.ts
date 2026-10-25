@@ -34,6 +34,22 @@ export function statusLine(page: Page) {
 
 /** Fails on any serious or critical axe violation, listing them for debugging. */
 export async function expectNoSeriousViolations(page: Page, label: string) {
+  // axe measures contrast at the current opacity, so a message caught mid fade-in reads as low
+  // contrast. Scan with reduced motion (the app then makes animations instant, as it does for
+  // users who ask for it) and let any animation already running finish. Endless ones are ignored.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every(
+          (animation) =>
+            animation.playState !== "running" ||
+            animation.effect?.getTiming().iterations === Infinity,
+        ),
+    undefined,
+    { timeout: 5000 },
+  );
   const results = await new AxeBuilder({ page }).analyze();
   const blocking = results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
