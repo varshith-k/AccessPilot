@@ -19,8 +19,18 @@ function confirmationPage(fields) {
     .join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Application submitted</title>
-<style>body{font:18px/1.5 system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem}dt{font-weight:600;margin-top:.75rem}dd{margin:0}</style></head>
-<body><main><h1>Application submitted</h1><p role="status">Confirmation number ${CONFIRMATION_NUMBER}.</p><dl>${rows}</dl></main></body></html>`;
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;--bg:#fafafa;--card:#fff;--text:#171717;--muted:#6b6b6b;--border:#eaeaea;--ok:#166534;--ok-soft:#f0fdf4}
+@media (prefers-color-scheme:dark){:root{--bg:#09090b;--card:#18181b;--text:#fafafa;--muted:#a1a1aa;--border:#27272a;--ok:#4ade80;--ok-soft:#0f2a1a}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+main{max-width:40rem;margin:0 auto;padding:3rem 1rem}
+h1{font-size:2rem;letter-spacing:-.02em;margin:0 0 .75rem}
+.ok{display:inline-block;padding:.35rem .9rem;border-radius:999px;background:var(--ok-soft);color:var(--ok);font-weight:600;margin:0}
+dl{margin:1.75rem 0 0;padding:1.5rem 1.75rem;background:var(--card);border:1px solid var(--border);border-radius:1rem}
+dt{font-size:.875rem;font-weight:600;color:var(--muted);margin-top:1rem}dt:first-child{margin-top:0}dd{margin:.15rem 0 0}
+</style></head>
+<body><main><h1>Application submitted</h1><p class="ok" role="status">Confirmation number ${CONFIRMATION_NUMBER}.</p><dl>${rows}</dl></main></body></html>`;
 }
 
 function readForm(request) {

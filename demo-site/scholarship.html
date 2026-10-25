@@ -4,100 +4,212 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>STEM Futures Scholarship</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      /* Same palette as the AccessPilot app (app/globals.css), light and dark. */
       :root {
-        color-scheme: light;
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --card: #ffffff;
+        --text: #171717;
+        --muted: #6b6b6b;
+        --border: #eaeaea;
+        --border-strong: #8c8c8c;
+        --accent: #4f46e5;
+        --accent-text: #ffffff;
+        --accent-soft: #eef2ff;
+        --accent-soft-text: #3730a3;
+        --danger: #b91c1c;
+        --warning-soft: #fffbeb;
+        --warning: #b45309;
+        --focus: #6366f1;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #09090b;
+          --card: #18181b;
+          --text: #fafafa;
+          --muted: #a1a1aa;
+          --border: #27272a;
+          --border-strong: #71717a;
+          --accent: #818cf8;
+          --accent-text: #09090b;
+          --accent-soft: #1e1b4b;
+          --accent-soft-text: #c7d2fe;
+          --danger: #f87171;
+          --warning-soft: #2a1f0a;
+          --warning: #fbbf24;
+          --focus: #818cf8;
+        }
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
-        font:
-          18px/1.5 system-ui,
-          sans-serif;
         margin: 0;
-        background: #f4f6fb;
-        color: #14213d;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          "Geist",
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
       }
       main {
-        max-width: 42rem;
-        margin: 2rem auto;
-        padding: 0 1rem 3rem;
+        max-width: 40rem;
+        margin: 0 auto;
+        padding: 2.5rem 1rem 4rem;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 0.5rem;
+        background: var(--accent);
+        color: var(--accent-text);
+        font-size: 0.8rem;
+        letter-spacing: 0;
       }
       h1 {
-        margin-bottom: 0.25rem;
+        margin: 1rem 0 0.5rem;
+        font-size: 2rem;
+        line-height: 1.2;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .intro {
+        margin: 0.75rem 0 0;
+        color: var(--muted);
       }
       .deadline {
-        color: #5a3e00;
-        background: #fff2cc;
-        display: inline-block;
-        padding: 0.15rem 0.6rem;
-        border-radius: 0.4rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin: 0;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        background: var(--warning-soft);
+        color: var(--warning);
+        font-size: 0.875rem;
+        font-weight: 600;
       }
       form {
-        background: #fff;
-        border-radius: 0.75rem;
-        padding: 1.25rem 1.5rem;
-        margin-top: 1.5rem;
-        box-shadow: 0 1px 4px rgb(0 0 0 / 12%);
+        margin-top: 1.75rem;
+        padding: 1.75rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
       }
       label {
         display: block;
+        margin-top: 1.25rem;
+        font-size: 0.875rem;
         font-weight: 600;
-        margin-top: 1rem;
+      }
+      label:first-of-type {
+        margin-top: 0;
       }
       .hint {
         font-weight: 400;
-        color: #4a5568;
+        color: var(--muted);
       }
       input,
-      select,
       textarea {
+        display: block;
         width: 100%;
-        box-sizing: border-box;
+        margin-top: 0.4rem;
+        padding: 0.65rem 0.85rem;
         font: inherit;
-        padding: 0.55rem 0.7rem;
-        margin-top: 0.3rem;
-        border: 2px solid #8a94a6;
-        border-radius: 0.4rem;
+        color: var(--text);
+        background: var(--card);
+        border: 1px solid var(--border-strong);
+        border-radius: 0.6rem;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--muted);
+      }
+      textarea {
+        resize: vertical;
       }
       input:focus,
-      select:focus,
-      textarea:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent);
+      }
       button:focus-visible {
-        outline: 3px solid #1d4ed8;
+        outline: 3px solid var(--focus);
         outline-offset: 2px;
       }
       .actions {
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         gap: 0.75rem;
-        margin-top: 1.5rem;
+        margin-top: 1.75rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
       }
       button {
         font: inherit;
-        font-weight: 700;
-        padding: 0.7rem 1.2rem;
-        border-radius: 0.5rem;
-        border: 2px solid #1d4ed8;
+        font-weight: 600;
+        padding: 0.65rem 1.25rem;
+        border-radius: 0.6rem;
         cursor: pointer;
       }
       .primary {
-        background: #1d4ed8;
-        color: #fff;
+        background: var(--accent);
+        color: var(--accent-text);
+        border: 1px solid var(--accent);
+      }
+      .primary:hover {
+        filter: brightness(1.08);
       }
       .secondary {
-        background: #fff;
-        color: #1d4ed8;
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border-strong);
       }
       .error {
-        color: #9b1c1c;
+        margin: 1rem 0 0;
+        color: var(--danger);
         font-weight: 600;
-        margin-top: 0.25rem;
       }
     </style>
   </head>
   <body>
     <main>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">SF</span>STEM Futures Fund
+      </div>
       <h1>STEM Futures Scholarship</h1>
       <p class="deadline">Deadline: December 1</p>
-      <p>
+      <p class="intro">
         Open to students starting a computer science, engineering or mathematics program. Fields
         marked required must be completed.
       </p>
