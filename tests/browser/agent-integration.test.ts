@@ -268,3 +268,35 @@ describe("orchestrator + Twinly adapter + real Chromium", () => {
     expect(JSON.stringify(task.events)).not.toContain('Alex Morgan","alt');
   });
 });
+
+describe("keeping the window open for review", () => {
+  it("leaves a finished task's browser usable, and closes it when the next task opens a browser", async () => {
+    const make = createRealBrowserFactory({ keepOpenMs: 60_000 });
+    const first = await make();
+    await first.open(`${site.origin}/scholarship`);
+    await first.close(); // the task ended
+    await expect(first.observe()).resolves.toMatchObject({
+      pageContext: { title: expect.any(String) },
+    });
+
+    const second = await make();
+    await second.open(`${site.origin}/scholarship`);
+    await expect(first.observe()).rejects.toThrow(); // the old window is gone
+    await second.close();
+  });
+
+  it("closes at once after Stop, even with keep-open on", async () => {
+    const driver = await createRealBrowserFactory({ keepOpenMs: 60_000 })();
+    await driver.open(`${site.origin}/scholarship`);
+    await driver.stop?.();
+    await driver.close();
+    await expect(driver.observe()).rejects.toThrow();
+  });
+
+  it("closes at once when keep-open is off", async () => {
+    const driver = await createRealBrowserFactory()();
+    await driver.open(`${site.origin}/scholarship`);
+    await driver.close();
+    await expect(driver.observe()).rejects.toThrow();
+  });
+});

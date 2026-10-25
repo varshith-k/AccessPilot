@@ -159,6 +159,8 @@ export async function inspectTarget(page: Page, action: BrowserAction): Promise<
           editable ||
           element instanceof HTMLAnchorElement ||
           element instanceof HTMLButtonElement ||
+          // Opening a dropdown changes nothing; submissions it might trigger are still blocked.
+          element instanceof HTMLSelectElement ||
           (input && ["checkbox", "radio"].includes(input.type))
         );
       const activatingKey = proposal.type === "key" && ["Enter", "Space"].includes(proposal.key);

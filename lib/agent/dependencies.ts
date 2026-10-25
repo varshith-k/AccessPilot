@@ -64,9 +64,11 @@ export function getAgentDeps(): AgentDeps {
   if (process.env.ACCESSPILOT_BROWSER === "real") {
     deps = {
       ...deps,
-      createBrowser: createRealBrowserFactory({
-        headed: process.env.ACCESSPILOT_BROWSER_HEADED === "1",
-      }),
+      createBrowser: createRealBrowserFactory(
+        process.env.ACCESSPILOT_BROWSER_HEADED === "1"
+          ? { headed: true, keepOpenMs: 10 * 60_000 }
+          : {},
+      ),
       actions: createLabelDrivenActions(SCHOLARSHIP_STEPS, "Submitted. Confirmation number 4821."),
     };
   }

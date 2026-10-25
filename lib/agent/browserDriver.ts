@@ -6,6 +6,21 @@ import type { BrowserDriver, Observation } from "./types";
 export interface RealBrowserOptions {
   /** Watch Chromium work. Defaults to headless. */
   headed?: boolean;
+  /**
+   * After a task ends, leave the window open this long so the user can look at the result, instead of
+   * it vanishing the moment the task finishes. Opening the next task's browser closes it sooner, and
+   * Stop still closes at once. Off (0) by default; meant for the visible window.
+   */
+  keepOpenMs?: number;
+}
+
+/** Windows kept open for review after their task ended. One more task closes them. */
+const lingering = new Set<BrowserController>();
+
+async function closeLingering(): Promise<void> {
+  const windows = [...lingering];
+  lingering.clear();
+  await Promise.all(windows.map((window) => window.close().catch(() => {})));
 }
 
 /**
@@ -25,6 +40,7 @@ export function createRealBrowserFactory(
 
     return {
       async open(url, signal): Promise<Observation> {
+        await closeLingering();
         controller = await createBrowserController({
           allowedOrigins: [new URL(url).origin],
           headless: !options.headed,
@@ -60,7 +76,17 @@ export function createRealBrowserFactory(
         await controller?.stop();
       },
       close: async () => {
-        await controller?.close();
+        const window = controller;
+        if (!window) return;
+        if (stopped || !options.keepOpenMs || window.isStopped) {
+          await window.close();
+          return;
+        }
+        lingering.add(window);
+        const timer = setTimeout(() => {
+          if (lingering.delete(window)) void window.close().catch(() => {});
+        }, options.keepOpenMs);
+        timer.unref?.();
       },
     };
   };

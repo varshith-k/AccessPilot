@@ -24,6 +24,12 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 /** Page text beyond this is cut so a huge page cannot blow the context or the latency budget. */
 const MAX_PAGE_CHARS = 24_000;
 /** Steps containing these words always need user approval, whatever the model said. */
+/**
+ * Statuses worth another try. The hosted Gemma endpoint has been seen answering 500 and even 404 for
+ * a model that works a second later, so a single bad answer must not end a task.
+ */
+const RETRYABLE_STATUS = new Set([404, 408, 429, 500, 502, 503, 504]);
+
 const COMMIT_PATTERN =
   /\b(submit|pay|purchase|buy|checkout|send|delete|remove|book|confirm order|place order|sign up|register)\b/i;
 /** Narration kinds that need the user's attention right now rather than at the next pause. */
@@ -45,6 +51,8 @@ export interface GemmaOptions {
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** Waits before each retry of a transient failure. Default [800, 2000]: up to three attempts. */
+  retryDelaysMs?: readonly number[];
 }
 
 export class GemmaError extends Error {
@@ -71,27 +79,37 @@ async function generate(
   const model = opts.model ?? process.env.GEMMA_MODEL ?? DEFAULT_MODEL;
   const doFetch = opts.fetchImpl ?? fetch;
 
-  let res: Response;
-  try {
-    res = await doFetch(`${ENDPOINT}/${model}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
-        generationConfig: {
-          temperature,
-          thinkingConfig: { thinkingLevel: opts.thinking ?? thinking },
-        },
-      }),
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
-    });
-  } catch (err) {
-    throw new GemmaError("Could not reach the Gemma API", err);
+  const delays = opts.retryDelaysMs ?? [800, 2000];
+  let res: Response | undefined;
+  let lastError: GemmaError | undefined;
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delays[attempt - 1]));
+    try {
+      res = await doFetch(`${ENDPOINT}/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: turns.map((t) => ({ role: t.role, parts: [{ text: t.text }] })),
+          generationConfig: {
+            temperature,
+            thinkingConfig: { thinkingLevel: opts.thinking ?? thinking },
+          },
+        }),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
+      });
+    } catch (err) {
+      lastError = new GemmaError("Could not reach the Gemma API", err);
+      continue;
+    }
+    if (res.ok) break;
+    lastError = new GemmaError(
+      `Gemma API returned ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
+    if (!RETRYABLE_STATUS.has(res.status)) throw lastError;
+    res = undefined;
   }
-  if (!res.ok) {
-    throw new GemmaError(`Gemma API returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  }
+  if (!res) throw lastError ?? new GemmaError("Could not reach the Gemma API");
 
   const data = (await res.json()) as {
     candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
