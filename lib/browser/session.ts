@@ -1,5 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { createUrlPolicy, NavigationPolicyError } from "./policy";
+import { createUrlPolicy, isPublicHttpsUrl, NavigationPolicyError } from "./policy";
 
 export const DEFAULT_VIEWPORT = { width: 1280, height: 720 } as const;
 
@@ -13,6 +13,15 @@ export interface BrowserSessionOptions {
   launchTimeoutMs?: number;
   /** Optional installed Chromium channel, for example "chrome". */
   channel?: string;
+  /** Allow navigating to same-site hosts (google.com to www.google.com). Off by default. */
+  sameSiteNavigation?: boolean;
+  /**
+   * Let pages load their own files (styles, scripts, images, fonts, and other GET requests) from
+   * other public https sites, so real pages render as people see them. Navigation, frames,
+   * popups and every non-GET request stay limited to the allowed origins, and private or local
+   * addresses are always refused. Off by default.
+   */
+  thirdPartySubresources?: boolean;
 }
 
 /** One isolated, in-memory session. Reuse it for a task, then always close it. */
@@ -29,7 +38,13 @@ export class BrowserSession {
   ) {}
 
   static async create(options: BrowserSessionOptions = {}): Promise<BrowserSession> {
-    const policy = createUrlPolicy(options.allowedOrigins);
+    const policy = createUrlPolicy(options.allowedOrigins, {
+      sameSiteNavigation: options.sameSiteNavigation ?? false,
+    });
+    const allowsSubresource = (url: string, method: string) =>
+      options.thirdPartySubresources === true &&
+      ["GET", "HEAD"].includes(method) &&
+      isPublicHttpsUrl(url);
     const viewport = options.viewport ?? DEFAULT_VIEWPORT;
     for (const [name, value] of Object.entries({
       width: viewport.width,
@@ -68,20 +83,25 @@ export class BrowserSession {
             await route.abort("blockedbyclient");
             return;
           }
-          if (
-            actionPolicy.enabled &&
-            !actionPolicy.approved &&
-            !["GET", "HEAD", "OPTIONS"].includes(request.method())
-          ) {
+          const isWrite = !["GET", "HEAD", "OPTIONS"].includes(request.method());
+          // Background writes to other sites (analytics beacons, telemetry) are never allowed and
+          // can't be the task's submission, so drop them without flagging the action.
+          if (isWrite && !request.isNavigationRequest() && !policy.allows(request.url())) {
+            await route.abort("blockedbyclient");
+            return;
+          }
+          if (actionPolicy.enabled && !actionPolicy.approved && isWrite) {
             actionPolicy.blocked = true;
             await route.abort("blockedbyclient");
             return;
           }
-          // Reject popup requests before they reach the network.
-          if (
-            !policy.allows(request.url()) ||
-            (request.isNavigationRequest() && request.frame().page() !== primaryPage)
-          ) {
+          // Reject popup requests before they reach the network. Documents (pages, frames) must
+          // be on an allowed origin; a page's own files may also come from public sites.
+          const isDocument = request.isNavigationRequest();
+          const permitted =
+            policy.allows(request.url()) ||
+            (!isDocument && allowsSubresource(request.url(), request.method()));
+          if (!permitted || (isDocument && request.frame().page() !== primaryPage)) {
             await route.abort("blockedbyclient");
             return;
           }

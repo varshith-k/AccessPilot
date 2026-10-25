@@ -2,17 +2,24 @@ import type { Page } from "playwright";
 import type { BrowserPageContext } from "../contracts/browser";
 import { SENSITIVE_FIELD_SELECTOR } from "./screenshot";
 
-/** A bounded map of visible, in-viewport controls. Never reads form values. */
+/**
+ * A bounded map of visible, in-viewport controls, plus the page's readable text. Never reads form
+ * values.
+ */
 export async function extractPageContext(
   page: Page,
-  options: { maxElements?: number } = {},
+  options: { maxElements?: number; maxTextChars?: number } = {},
 ): Promise<BrowserPageContext> {
   const maxElements = options.maxElements ?? 200;
   if (!Number.isInteger(maxElements) || maxElements < 1 || maxElements > 1000) {
     throw new RangeError("maxElements must be an integer from 1 to 1000.");
   }
+  const maxTextChars = options.maxTextChars ?? 4000;
+  if (!Number.isInteger(maxTextChars) || maxTextChars < 0 || maxTextChars > 20_000) {
+    throw new RangeError("maxTextChars must be an integer from 0 to 20000.");
+  }
   return page.evaluate(
-    ({ limit, sensitiveSelector }) => {
+    ({ limit, textLimit, sensitiveSelector }) => {
       const clean = (text: string | null | undefined) =>
         (text ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
       // A wrapping label can contain a textarea's initial value. Read only
@@ -114,14 +121,47 @@ export async function extractPageContext(
             Boolean(control?.validity && !control.validity.valid),
         });
       }
+      // Readable text for the model: the whole page (not just the viewport), main content first
+      // when the page marks it. Controls are already listed above, so their text and every form
+      // value, hidden node, and private field is skipped.
+      const textParts: string[] = [];
+      let textLength = 0;
+      let textTruncated = false;
+      if (textLimit > 0) {
+        const root =
+          document.querySelector<HTMLElement>("main, [role='main'], article") ?? document.body;
+        const skip = `script, style, noscript, template, svg, button, select, option, input, textarea, [contenteditable]:not([contenteditable="false"]), [role="button"], [hidden], [aria-hidden="true"], [inert], ${sensitiveSelector}`;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          const parent = walker.currentNode.parentElement;
+          const raw = (walker.currentNode.textContent ?? "").replace(/\s+/g, " ").trim();
+          if (!parent || raw === "" || parent.closest(skip)) continue;
+          if (!parent.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
+          const heading = parent.closest("h1, h2, h3, h4, h5, h6");
+          const piece = heading ? `\n${"#".repeat(Number(heading.tagName[1]))} ${raw}\n` : raw;
+          if (textLength + piece.length > textLimit) {
+            textTruncated = true;
+            break;
+          }
+          textParts.push(piece);
+          textLength += piece.length + 1;
+        }
+      }
+      const text = textParts
+        .join(" ")
+        .replace(/ *\n */g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
       return {
         url: location.href,
         title: document.title.slice(0, 300),
         elements,
         validationErrors: [...new Set(errors)].slice(0, 50),
         truncated,
+        ...(text ? { text } : {}),
+        ...(textTruncated ? { textTruncated } : {}),
       };
     },
-    { limit: maxElements, sensitiveSelector: SENSITIVE_FIELD_SELECTOR },
+    { limit: maxElements, textLimit: maxTextChars, sensitiveSelector: SENSITIVE_FIELD_SELECTOR },
   );
 }

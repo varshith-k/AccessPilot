@@ -43,10 +43,23 @@ const ASSERTIVE: ReadonlySet<Progress["kind"]> = new Set([
   "failed",
 ]);
 
+/** Website text can't close or reopen the untrusted-content wrapper the prompts put around it. */
+function neutralize(text: string): string {
+  return text.replace(/<\/?\s*page_context\s*>/gi, "");
+}
+
 /** Plain text view of the page for the model. The browser already excludes sensitive values. */
 export function serializePage(page: BrowserPageContext): string {
   const lines = page.elements.map((el) => `- ${el.role}: ${el.label}`);
-  return [`Page: ${page.title} (${page.url})`, ...lines].join("\n");
+  const parts = [`Page: ${page.title} (${page.url})`, ...lines];
+  if (page.text) {
+    parts.push(
+      "",
+      "Page text:",
+      page.text + (page.textTruncated ? "\n(More text on the page is not shown.)" : ""),
+    );
+  }
+  return neutralize(parts.join("\n"));
 }
 
 function host(url: string): string {
