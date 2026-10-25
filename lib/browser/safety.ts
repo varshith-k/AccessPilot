@@ -161,7 +161,11 @@ export async function inspectTarget(page: Page, action: BrowserAction): Promise<
           element instanceof HTMLButtonElement ||
           // Opening a dropdown changes nothing; submissions it might trigger are still blocked.
           element instanceof HTMLSelectElement ||
-          (input && ["checkbox", "radio"].includes(input.type))
+          // Date and time pickers only open or focus a field; clicking one changes nothing.
+          (input &&
+            ["checkbox", "radio", "date", "time", "datetime-local", "month", "week"].includes(
+              input.type,
+            ))
         );
       const activatingKey = proposal.type === "key" && ["Enter", "Space"].includes(proposal.key);
       return {

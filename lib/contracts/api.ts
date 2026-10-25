@@ -21,6 +21,22 @@ function isPlausibleHostname(hostname: string): boolean {
  * Addresses with spaces or invisible characters are rejected rather than silently "fixed", so
  * the address the user sees is the one that gets opened.
  */
+/** Private, link-local (cloud metadata), shared and unspecified IPv4 ranges. */
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) return false;
+  const [a = 0, b = 0] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
 export function isAllowedTaskUrl(value: string): boolean {
   if (HIDDEN_OR_SPACE.test(value)) return false;
   // Browsers decode percent-escapes in the host (`example.org%2Eevil.com` opens
@@ -34,7 +50,8 @@ export function isAllowedTaskUrl(value: string): boolean {
   }
   if (url.username !== "" || url.password !== "") return false;
   if (url.protocol === "https:") {
-    return LOCALHOST_NAMES.has(url.hostname) || isPlausibleHostname(url.hostname);
+    if (LOCALHOST_NAMES.has(url.hostname)) return true;
+    return isPlausibleHostname(url.hostname) && !isPrivateIpv4(url.hostname);
   }
   return url.protocol === "http:" && LOCALHOST_NAMES.has(url.hostname);
 }

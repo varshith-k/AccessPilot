@@ -435,7 +435,7 @@ function applyEvent(state: TaskState, event: TaskEvent): TransitionResult {
           event,
           "system",
           event.by === "user" ? STOPPED_BY_USER_TEXT : "AccessPilot stopped the task.",
-          "warning",
+          event.by === "user" ? "info" : "warning",
         ),
       );
   }
@@ -632,7 +632,7 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
       return applied(
         withLocalLog(
           { ...finish(state, "stopped"), stoppedBy: "user" },
-          { speaker: "system", text: STOPPED_BY_USER_TEXT, at: action.at, tone: "warning" },
+          { speaker: "system", text: STOPPED_BY_USER_TEXT, at: action.at, tone: "info" },
         ),
       );
 

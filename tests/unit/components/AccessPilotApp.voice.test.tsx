@@ -197,7 +197,7 @@ describe("AccessPilotApp voice", () => {
     expect(synth.cancelCount).toBeGreaterThan(cancelsBefore);
     expect(synth.current).toBeNull();
     await advance(500);
-    expect(liveText("polite")).toMatch(/Listening…/);
+    expect(liveText("assertive")).toMatch(/Listening…/);
     const spokenWhileListening = synth.spoken.length;
     await advance(5000);
     expect(synth.spoken.length).toBe(spokenWhileListening);

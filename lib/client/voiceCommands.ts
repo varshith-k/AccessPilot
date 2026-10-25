@@ -9,6 +9,7 @@ export type VoiceCommand =
   | { kind: "continue" }
   | { kind: "start_task" }
   | { kind: "clear_goal" }
+  | { kind: "new_task" }
   /** An approve or deny phrase when nothing is waiting for approval. */
   | { kind: "no_approval_pending" }
   /** A continue phrase when nothing is waiting for the user. */
@@ -166,6 +167,14 @@ const STOP_PHRASES = new Set([
 
 const CLEAR_GOAL_PHRASES = new Set(["clear goal", "clear the goal", "clear my goal"]);
 
+const NEW_TASK_PHRASES = new Set([
+  "new task",
+  "start a new task",
+  "start new task",
+  "start over",
+  "start a different task",
+]);
+
 /** Hesitations and politeness that should not change the meaning. */
 function stripFillers(text: string): string {
   return text
@@ -190,12 +199,15 @@ export function parseVoiceCommand(transcript: string, context: VoiceCommandConte
   } else if (STOP_PHRASES.has(phrase) || STOP_PHRASES.has(normalized)) {
     return { kind: "stop" };
   }
+  // A question ("submit it?") is never an answer, however its words read once punctuation is gone.
+  const isQuestion = /\?\s*$/.test(transcript.trim());
 
   if (REPEAT_PHRASES.has(phrase) || REPEAT_PHRASES.has(normalized)) return { kind: "repeat" };
   if (DESCRIBE_PAGE_PHRASES.has(phrase) || DESCRIBE_PAGE_PHRASES.has(normalized)) {
     return { kind: "describe_page" };
   }
 
+  if (context.approvalOpen && isQuestion) return { kind: "unclear_approval" };
   if (context.approvalOpen) {
     const approves = APPROVE_PHRASES.has(phrase) || APPROVE_PHRASES.has(normalized);
     const denies = DENY_PHRASES.has(phrase) || DENY_PHRASES.has(normalized);
@@ -212,6 +224,7 @@ export function parseVoiceCommand(transcript: string, context: VoiceCommandConte
   if (has(APPROVE_PHRASES) || has(DENY_PHRASES)) return { kind: "no_approval_pending" };
   if (has(START_PHRASES)) return { kind: "start_task" };
   if (has(CLEAR_GOAL_PHRASES)) return { kind: "clear_goal" };
+  if (has(NEW_TASK_PHRASES)) return { kind: "new_task" };
 
   return { kind: "none", text: transcript.trim() };
 }

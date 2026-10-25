@@ -239,8 +239,15 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     });
     switch (command.kind) {
       case "stop":
-        if (active) void session.stop();
-        else reply("Nothing is running.", "polite");
+        stop();
+        return;
+      case "new_task":
+        if (active) {
+          reply("A task is running. Say “stop” first if you want to start over.", "polite");
+          return;
+        }
+        startOver();
+        reply("Ready for a new task.", "polite");
         return;
       case "approve":
         approve();
@@ -338,7 +345,9 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
       holdSpeech(listening);
       if (listening) {
         setHideHeard(false);
-        announce("Listening…", "polite");
+        // Assertive: immediate feedback for the key press, and never merged into the reply that
+        // follows (polite messages are batched).
+        announce("Listening…", "assertive");
       }
     },
     onNothingHeard: () => reply("I didn't hear anything. Try again, or type instead.", "polite"),
@@ -381,13 +390,15 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
 
   const { stop: stopSession } = session;
   const stop = useCallback(() => {
+    // Silence first, so speech held while the microphone was on is dropped, not played.
+    cancelSpeech();
     abortListening();
     if (!active) {
       reply("Nothing is running.", "polite");
       return;
     }
     void stopSession();
-  }, [abortListening, active, reply, stopSession]);
+  }, [abortListening, active, cancelSpeech, reply, stopSession]);
 
   const showHelp = useCallback(() => setHelpOpen(true), []);
 
@@ -497,14 +508,31 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
   const currentTask = useMemo(
     () =>
       state.request
-        ? { goal: state.request.goal, url: state.request.url, status: state.status }
+        ? {
+            goal: state.request.goal,
+            url: state.request.url,
+            status: state.status,
+            declined: state.declined,
+          }
         : null,
-    [state.request, state.status],
+    [state.request, state.status, state.declined],
   );
 
   const suggest = (text: string) => {
     editGoal(text);
-    announce(`Goal filled in: ${text} Add the website address, then press Start task.`, "polite");
+    const urlField = document.querySelector<HTMLInputElement>("#main input[name='url']");
+    const needsUrl = url.trim() === "";
+    announce(
+      needsUrl
+        ? `Goal filled in: ${text} Now add the website address, then press Start task.`
+        : `Goal filled in: ${text} Press Start task when you're ready.`,
+      "polite",
+    );
+    // The chips disappear once a goal is filled in; keep keyboard focus on the form.
+    window.setTimeout(() => {
+      if (needsUrl) urlField?.focus();
+      else urlField?.form?.querySelector<HTMLButtonElement>("button[type='submit']")?.focus();
+    }, 0);
   };
 
   const title = state.request?.goal ?? "New task";
@@ -585,6 +613,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         <TopBar
           title={title}
           status={state.status}
+          declined={state.declined}
           mode={mode}
           theme={theme}
           onThemeChange={setTheme}
@@ -688,7 +717,9 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                         className={
                           state.status === "idle"
                             ? "text-sm text-muted"
-                            : "text-lg font-medium leading-snug tracking-tight"
+                            : statusSentence(state).length > 160
+                              ? "whitespace-pre-line text-[15px] leading-relaxed"
+                              : "text-lg font-medium leading-snug tracking-tight"
                         }
                       >
                         {statusSentence(state)}
@@ -697,7 +728,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                   </div>
                   {active && (
                     // Stop comes first: it is the control that must always be quickest to reach.
-                    <div className="grid w-full grid-cols-2 items-start gap-2 sm:flex sm:w-auto sm:flex-wrap max-sm:[&_button]:w-full">
+                    <div className="grid w-full grid-cols-2 items-start gap-2 sm:w-auto [&_button]:w-full">
                       <StopButton onStop={stop} stopping={state.stopping} />
                       <VoiceControl
                         compact
