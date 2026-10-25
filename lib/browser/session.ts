@@ -13,6 +13,8 @@ export interface BrowserSessionOptions {
   launchTimeoutMs?: number;
   /** Optional installed Chromium channel, for example "chrome". */
   channel?: string;
+  /** If the channel can't be launched, use the bundled Chromium instead of failing. */
+  channelFallback?: boolean;
   /** Allow navigating to same-site hosts (google.com to www.google.com). Off by default. */
   sameSiteNavigation?: boolean;
   /**
@@ -60,11 +62,21 @@ export class BrowserSession {
       }
     }
 
-    const browser = await chromium.launch({
-      headless: options.headless ?? true,
-      timeout: options.launchTimeoutMs ?? 30_000,
-      ...(options.channel ? { channel: options.channel } : {}),
-    });
+    const launch = (channel?: string) =>
+      chromium.launch({
+        headless: options.headless ?? true,
+        timeout: options.launchTimeoutMs ?? 30_000,
+        ...(channel ? { channel } : {}),
+      });
+    let browser: Browser;
+    try {
+      browser = await launch(options.channel);
+    } catch (error) {
+      // An installed browser channel (Google Chrome) isn't available on every machine, such as CI
+      // or a container. Fall back to Playwright's bundled Chromium rather than failing the task.
+      if (!options.channel || !options.channelFallback) throw error;
+      browser = await launch();
+    }
     let context: BrowserContext | undefined;
     try {
       context = await browser.newContext({
