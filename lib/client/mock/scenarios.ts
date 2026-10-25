@@ -434,13 +434,15 @@ const slowNetwork: MockScenario = {
   ],
 };
 
-export const DEMO_FOLLOW_UP_SUMMARY =
-  "Demo mode only plays its scripted example, so it can't do that. Nothing on the page was changed. Start a new task with the original goal to replay the example, or connect the live backend for other requests.";
+/** Short enough (under 160 characters) to show in full in the status line. */
+export const DEMO_FOLLOW_UP_MESSAGE =
+  "Demo mode can only replay its scripted example, so it can't do that. Nothing was changed.";
 
 /**
  * Played for any goal other than the one the demo first ran (a follow-up such as "Now find the
- * deadline"). The demo can't act on new requests, so it says so instead of replaying the form
- * and asking to submit it.
+ * deadline"). The demo can't act on new requests, so it refuses instead of replaying the form
+ * and asking to submit it. It ends as an unrecoverable failure so the UI shows "didn't finish",
+ * never success, and offers no Try again (retrying can't help).
  */
 export const demoFollowUpScript: ScriptStep[] = [
   emit(400, {
@@ -448,7 +450,12 @@ export const demoFollowUpScript: ScriptStep[] = [
     text: "This is demo mode, so I can only play the scripted example.",
     priority: "polite",
   }),
-  emit(400, { type: "task.completed", summary: DEMO_FOLLOW_UP_SUMMARY }),
+  emit(400, {
+    type: "task.failed",
+    code: "demo_unsupported",
+    message: DEMO_FOLLOW_UP_MESSAGE,
+    recoverable: false,
+  }),
 ];
 
 export const mockScenarios: { [N in MockScenarioName]: MockScenario } = {

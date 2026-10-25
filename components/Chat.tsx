@@ -103,6 +103,8 @@ interface MessageProps {
   onCopy(entry: LogEntry): void;
   /** Continues a run of AccessPilot messages: no repeated avatar, name, or time on screen. */
   grouped: boolean;
+  /** The newest AccessPilot message: on phones only its copy button is shown. */
+  latest: boolean;
 }
 
 /** How close together (ms) consecutive AccessPilot messages must be to share one header. */
@@ -116,7 +118,7 @@ function continuesGroup(previous: LogEntry | undefined, entry: LogEntry): boolea
   return Number.isFinite(gap) && gap >= 0 && gap < GROUP_WINDOW_MS;
 }
 
-function Message({ entry, copied, onCopy, grouped }: MessageProps) {
+function Message({ entry, copied, onCopy, grouped, latest }: MessageProps) {
   if (entry.speaker === "user") {
     return (
       <li className="flex animate-enter flex-col items-end gap-1.5">
@@ -154,7 +156,13 @@ function Message({ entry, copied, onCopy, grouped }: MessageProps) {
         <Meta entry={entry} hidden={grouped} />
         <p className="whitespace-pre-wrap break-words text-[15px]">{entry.text}</p>
       </div>
-      <div className="absolute -top-1.5 right-0 transition-opacity duration-150 max-sm:opacity-60 sm:opacity-0 sm:group-focus-within/message:opacity-100 sm:group-hover/message:opacity-100">
+      <div
+        data-testid="copy-control"
+        className={`absolute -top-1.5 right-0 transition-opacity duration-150 sm:opacity-0 sm:group-focus-within/message:opacity-100 sm:group-hover/message:opacity-100 ${
+          // Phones have no hover: a copy icon on every message clutters the conversation.
+          latest ? "max-sm:opacity-60" : "max-sm:hidden"
+        }`}
+      >
         <IconButton
           label={copied ? "Copied" : "Copy message"}
           tooltipSide="left"
@@ -183,6 +191,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const { announce } = useAnnouncer();
   const hasUnseen = scrolledAwayAt !== null && entries.length > scrolledAwayAt;
+  const latestAssistantId = entries.filter((entry) => entry.speaker === "assistant").at(-1)?.id;
 
   const scrollToLatest = () => {
     const log = logRef.current;
@@ -264,6 +273,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
                   key={entry.id}
                   entry={entry}
                   grouped={continuesGroup(entries[index - 1], entry)}
+                  latest={entry.id === latestAssistantId}
                   copied={copiedId === entry.id}
                   onCopy={(target) => void copy(target)}
                 />

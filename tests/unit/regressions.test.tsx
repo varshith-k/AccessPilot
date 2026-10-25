@@ -471,7 +471,7 @@ describe("app flows", () => {
       expect(goalBox()).toHaveValue("Find the deadline");
     });
 
-    it("in demo mode a follow-up explains the limit instead of asking to submit the form", async () => {
+    it("in demo mode a follow-up is refused, never shown as a success", async () => {
       const user = renderApp();
       await finishTask(user);
       await user.type(
@@ -481,11 +481,27 @@ describe("app flows", () => {
       await user.click(screen.getByRole("button", { name: "Send" }));
       await until(
         () =>
-          screen.queryByText(/^Demo mode only plays its scripted example/, {
+          screen.queryByText(/^Demo mode can only replay its scripted example/, {
             selector: "p.text-lg",
           }) !== null,
       );
       expect(screen.queryByRole("dialog")).toBeNull();
+      // Shown in full, as a task that didn't finish, with nothing to retry.
+      expect(
+        screen.getByText(
+          "Demo mode can only replay its scripted example, so it can't do that. Nothing was changed.",
+          { selector: "p.text-lg" },
+        ),
+      ).toBeVisible();
+      expect(screen.getByRole("heading", { name: /The task didn't finish/ })).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      const log = within(screen.getByRole("region", { name: "Conversation history" }));
+      const refusal = log
+        .getAllByText(/^Demo mode can only replay its scripted example/)
+        .at(-1)
+        ?.closest("li");
+      expect(refusal).toHaveTextContent("(Problem)");
+      expect(refusal).not.toHaveTextContent("(Done)");
     });
   });
 
@@ -556,6 +572,17 @@ describe("app flows", () => {
       expect(screen.getByRole("button", { name: /^Microphone/ })).toHaveAttribute(
         "aria-pressed",
         "false",
+      );
+    });
+
+    it("a spoken local address goes into the address box as http", () => {
+      renderApp();
+      speak("localhost:4000/scholarship");
+      expect(screen.getByRole("textbox", { name: "Website address" })).toHaveValue(
+        "http://localhost:4000/scholarship",
+      );
+      expect(screen.getByRole("textbox", { name: "What do you want to get done?" })).toHaveValue(
+        "",
       );
     });
 
