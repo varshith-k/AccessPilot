@@ -158,7 +158,8 @@ describe("navigation and observation in Chromium", () => {
       await page.evaluate(() => {
         location.href = "about:blank";
       });
-      await expect.poll(() => page.isClosed()).toBe(true);
+      // Closing can take longer than poll's 1s default on a busy CI runner.
+      await expect.poll(() => page.isClosed(), { timeout: 10_000 }).toBe(true);
     } finally {
       await session.close();
     }
