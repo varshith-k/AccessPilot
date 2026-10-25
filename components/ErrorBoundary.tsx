@@ -1,7 +1,8 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { buttonStyles, panelStyles } from "./ui/styles";
+import { AlertIcon } from "./ui/icons";
+import { buttonStyles } from "./ui/styles";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -31,15 +32,25 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override render() {
     if (this.state.failed) {
       return (
-        <div role="alert" className={`${panelStyles} m-4 space-y-3 border-2 border-danger`}>
-          <h2 className="text-xl font-bold">Something went wrong in AccessPilot</h2>
-          <p>
-            The assistant screen stopped working. If a task was running, it may still be open in the
-            browser window. Reload the assistant to continue.
-          </p>
-          <button type="button" onClick={this.retry} className={buttonStyles.primary}>
-            Reload the assistant
-          </button>
+        <div className="flex min-h-dvh items-center justify-center p-4">
+          <div
+            role="alert"
+            className="w-full max-w-md space-y-4 rounded-card border border-border bg-elevated p-6 shadow-elevated"
+          >
+            <span className="flex size-10 items-center justify-center rounded-full bg-danger-soft text-danger">
+              <AlertIcon className="size-5" />
+            </span>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Something went wrong in AccessPilot
+            </h2>
+            <p className="text-sm text-muted">
+              The assistant screen stopped working. If a task was running, it may still be open in
+              the browser window. Reload the assistant to continue.
+            </p>
+            <button type="button" onClick={this.retry} className={buttonStyles.primary}>
+              Reload the assistant
+            </button>
+          </div>
         </div>
       );
     }

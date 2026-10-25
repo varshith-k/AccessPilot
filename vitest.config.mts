@@ -22,6 +22,9 @@ export default defineConfig({
       "lib/ai/**/*.test.ts",
     ],
     restoreMocks: true,
+    // Full-app flows and axe audits render the whole workspace in jsdom. They take 1–3 s alone,
+    // and the 5 s default leaves no headroom when every worker runs at once on a busy machine.
+    testTimeout: 15_000,
     coverage: {
       provider: "v8",
       reporter: ["text-summary", "text", "html"],

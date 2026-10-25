@@ -3,7 +3,8 @@
 import { useId, useRef, useState, type FormEvent } from "react";
 import { goalSchema, taskUrlSchema, type StartTaskRequest } from "@/lib/contracts";
 import { useAnnouncer } from "@/hooks/useAnnouncer";
-import { buttonStyles, inputStyles } from "./ui/styles";
+import { AlertIcon, ArrowUpIcon, GlobeIcon, Spinner } from "./ui/icons";
+import { buttonStyles, errorTextStyles, hintStyles, inputStyles, labelStyles } from "./ui/styles";
 
 export interface TaskFormProps {
   url: string;
@@ -86,74 +87,80 @@ export function TaskForm({
       className="space-y-4"
       aria-describedby={busy && busyMessage ? ids.busy : undefined}
     >
-      <div className="space-y-1">
-        <label htmlFor={ids.url} className="block font-semibold">
+      <div className="space-y-1.5">
+        <label htmlFor={ids.url} className={labelStyles}>
           Website address
         </label>
-        <p id={ids.urlHint} className="text-sm text-muted">
+        <div className="relative">
+          <GlobeIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <input
+            ref={urlRef}
+            id={ids.url}
+            name="url"
+            type="url"
+            inputMode="url"
+            autoComplete="url"
+            spellCheck={false}
+            placeholder="https://example.edu/apply"
+            value={url}
+            onChange={(event) => onUrlChange(event.target.value)}
+            aria-invalid={errors.url ? true : undefined}
+            aria-describedby={describedBy(ids.urlHint, Boolean(errors.url) && ids.urlError)}
+            className={`${inputStyles} pl-10 font-mono text-sm`}
+          />
+        </div>
+        <p id={ids.urlHint} className={hintStyles}>
           Starts with https://. Use http://localhost only for local testing.
         </p>
-        <input
-          ref={urlRef}
-          id={ids.url}
-          name="url"
-          type="url"
-          inputMode="url"
-          autoComplete="url"
-          spellCheck={false}
-          placeholder="https://example.edu/apply"
-          value={url}
-          onChange={(event) => onUrlChange(event.target.value)}
-          aria-invalid={errors.url ? true : undefined}
-          aria-describedby={describedBy(ids.urlHint, Boolean(errors.url) && ids.urlError)}
-          className={inputStyles}
-        />
         {errors.url && (
-          <p id={ids.urlError} className="font-semibold text-danger">
-            <span aria-hidden="true">⚠ </span>
+          <p id={ids.urlError} className={errorTextStyles}>
+            <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
             {errors.url}
           </p>
         )}
       </div>
 
-      <div className="space-y-1">
-        <label htmlFor={ids.goal} className="block font-semibold">
+      <div className="space-y-1.5">
+        <label htmlFor={ids.goal} className={labelStyles}>
           What do you want to get done?
         </label>
-        <p id={ids.goalHint} className="text-sm text-muted">
-          For example: Help me complete this scholarship application.
-        </p>
         <textarea
           ref={goalRef}
           id={ids.goal}
           name="goal"
           rows={3}
           value={goal}
+          placeholder="Describe the task in your own words…"
           onChange={(event) => onGoalChange(event.target.value)}
           aria-invalid={errors.goal ? true : undefined}
           aria-describedby={describedBy(ids.goalHint, Boolean(errors.goal) && ids.goalError)}
-          className={inputStyles}
+          className={`${inputStyles} min-h-24 resize-y leading-6`}
         />
+        <p id={ids.goalHint} className={hintStyles}>
+          For example: Help me complete this scholarship application.
+        </p>
         {errors.goal && (
-          <p id={ids.goalError} className="font-semibold text-danger">
-            <span aria-hidden="true">⚠ </span>
+          <p id={ids.goalError} className={errorTextStyles}>
+            <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
             {errors.goal}
           </p>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="submit" disabled={starting} className={buttonStyles.primary}>
-          {starting ? "Starting…" : "Start task"}
-        </button>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         {starting && (
-          <p className="text-sm text-muted">
+          <p className={`${hintStyles} mr-auto`}>
             Starting your task. This usually takes a few seconds.
           </p>
         )}
+        <button type="submit" disabled={starting} className={buttonStyles.primary}>
+          {starting ? <Spinner /> : <ArrowUpIcon />}
+          {starting ? "Starting…" : "Start task"}
+        </button>
       </div>
       {busy && busyMessage && (
-        <p id={ids.busy} className="font-semibold text-danger">
+        <p id={ids.busy} className={errorTextStyles}>
+          <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
           {busyMessage}
         </p>
       )}

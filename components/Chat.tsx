@@ -1,10 +1,21 @@
 "use client";
 
-import { useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { useAnnouncer } from "@/hooks/useAnnouncer";
 import type { LogEntry, LogTone, Speaker } from "@/lib/client/taskState";
 import type { FollowUpResult } from "@/hooks/useTaskSession";
-import { buttonStyles, inputStyles } from "./ui/styles";
+import {
+  AlertIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  InfoIcon,
+  LogoMark,
+  MessageIcon,
+} from "./ui/icons";
+import { IconButton } from "./ui/IconButton";
+import { buttonStyles, eyebrowStyles, errorTextStyles, hintStyles, labelStyles } from "./ui/styles";
 
 export interface ChatProps {
   entries: LogEntry[];
@@ -27,15 +38,16 @@ const TONE_LABEL: Record<LogTone, string | null> = {
   error: "Problem",
 };
 
-const TONE_CLASS: Record<LogTone, string> = {
-  info: "border-border",
-  success: "border-success",
-  warning: "border-warning",
-  error: "border-danger",
+const TONE_STYLE: Record<LogTone, { chip: string; icon: string; Icon: typeof InfoIcon }> = {
+  info: { chip: "", icon: "text-muted", Icon: InfoIcon },
+  success: { chip: "bg-success-soft text-success", icon: "text-success", Icon: CheckIcon },
+  warning: { chip: "bg-warning-soft text-warning", icon: "text-warning", Icon: AlertIcon },
+  error: { chip: "bg-danger-soft text-danger", icon: "text-danger", Icon: AlertIcon },
 };
 
 /** How close to the bottom (px) still counts as "following" the conversation. */
 const STICK_THRESHOLD = 48;
+const COPIED_MS = 1500;
 
 const FOLLOW_UP_ERRORS: Record<Exclude<FollowUpResult, { ok: true }>["reason"], string> = {
   empty: "Type a message first.",
@@ -50,6 +62,81 @@ function formatTime(iso: string): string {
     : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
+function Meta({ entry, align = "start" }: { entry: LogEntry; align?: "start" | "end" }) {
+  const toneLabel = TONE_LABEL[entry.tone];
+  return (
+    <p
+      className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted ${align === "end" ? "justify-end" : ""}`}
+    >
+      <span className="font-medium text-fg">{SPEAKER_LABEL[entry.speaker]}</span>{" "}
+      {toneLabel && (
+        <span
+          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${TONE_STYLE[entry.tone].chip}`}
+        >
+          <span className="sr-only">(</span>
+          {toneLabel}
+          <span className="sr-only">) </span>
+        </span>
+      )}
+      <time dateTime={entry.at}>{formatTime(entry.at)}</time>
+    </p>
+  );
+}
+
+interface MessageProps {
+  entry: LogEntry;
+  copied: boolean;
+  onCopy(entry: LogEntry): void;
+}
+
+function Message({ entry, copied, onCopy }: MessageProps) {
+  if (entry.speaker === "user") {
+    return (
+      <li className="flex animate-enter flex-col items-end gap-1.5">
+        <Meta entry={entry} align="end" />
+        <p className="max-w-[min(85%,36rem)] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5 text-[15px] text-on-accent-soft">
+          {entry.text}
+        </p>
+      </li>
+    );
+  }
+
+  if (entry.speaker === "system") {
+    const { Icon, icon } = TONE_STYLE[entry.tone];
+    return (
+      <li className="flex animate-enter gap-3">
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-border bg-subtle">
+          <Icon className={`size-3.5 ${icon}`} />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <Meta entry={entry} />
+          <p className="whitespace-pre-wrap break-words text-sm">{entry.text}</p>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className="group/message relative flex animate-enter gap-3">
+      <LogoMark className="mt-0.5 size-7" />
+      <div className="min-w-0 flex-1 space-y-1 pr-9">
+        <Meta entry={entry} />
+        <p className="whitespace-pre-wrap break-words text-[15px]">{entry.text}</p>
+      </div>
+      <div className="absolute -top-1.5 right-0 transition-opacity duration-150 sm:opacity-0 sm:group-focus-within/message:opacity-100 sm:group-hover/message:opacity-100">
+        <IconButton
+          label={copied ? "Copied" : "Copy message"}
+          tooltipSide="left"
+          className="size-8 [&_svg]:size-3.5"
+          onClick={() => onCopy(entry)}
+        >
+          {copied ? <CheckIcon /> : <CopyIcon />}
+        </IconButton>
+      </div>
+    </li>
+  );
+}
+
 export function Chat({ entries, busy, onSend }: ChatProps) {
   const id = useId();
   const headingId = `${id}-heading`;
@@ -62,6 +149,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
   const [scrolledAwayAt, setScrolledAwayAt] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const { announce } = useAnnouncer();
   const hasUnseen = scrolledAwayAt !== null && entries.length > scrolledAwayAt;
 
@@ -76,6 +164,12 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
     const log = logRef.current;
     if (log && scrolledAwayAt === null) log.scrollTop = log.scrollHeight;
   }, [entries.length, scrolledAwayAt]);
+
+  useEffect(() => {
+    if (copiedId === null) return;
+    const timer = setTimeout(() => setCopiedId(null), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copiedId]);
 
   const handleScroll = () => {
     const log = logRef.current;
@@ -99,62 +193,73 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
     }
   };
 
+  const copy = async (entry: LogEntry) => {
+    try {
+      await navigator.clipboard.writeText(entry.text);
+      setCopiedId(entry.id);
+      announce("Message copied.", "polite");
+    } catch {
+      announce("Couldn't copy. Select the text and copy it instead.", "assertive");
+    }
+  };
+
   return (
-    <section className="space-y-3">
-      <h2 id={headingId} className="text-xl font-bold">
+    <section aria-labelledby={headingId} className="space-y-3">
+      <h2 id={headingId} className={eyebrowStyles}>
         Conversation
       </h2>
-      <div
-        ref={logRef}
-        onScroll={handleScroll}
-        tabIndex={0}
-        role="region"
-        aria-label="Conversation history"
-        className="max-h-[28rem] min-h-24 overflow-y-auto rounded-lg border border-border bg-bg p-3"
-      >
-        {entries.length === 0 ? (
-          <p className="text-muted">
-            Nothing yet. When you start a task, what AccessPilot does and says appears here.
-          </p>
-        ) : (
-          <ol className="space-y-3">
-            {entries.map((entry) => {
-              const toneLabel = TONE_LABEL[entry.tone];
-              return (
-                <li
+      <div className="relative">
+        <div
+          ref={logRef}
+          onScroll={handleScroll}
+          tabIndex={0}
+          role="region"
+          aria-label="Conversation history"
+          className="max-h-[min(34rem,65dvh)] min-h-28 overflow-y-auto overscroll-contain rounded-card border border-border bg-elevated p-4 sm:p-5"
+        >
+          {entries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+              <span className="flex size-10 items-center justify-center rounded-full border border-border bg-subtle text-muted">
+                <MessageIcon className="size-[18px]" />
+              </span>
+              <p className="max-w-sm text-sm text-muted">
+                Nothing yet. When you start a task, what AccessPilot does and says appears here.
+              </p>
+            </div>
+          ) : (
+            <ol className="space-y-5">
+              {entries.map((entry) => (
+                <Message
                   key={entry.id}
-                  className={`border-l-4 pl-3 ${TONE_CLASS[entry.tone]} ${entry.speaker === "user" ? "bg-surface py-1" : ""}`}
-                >
-                  <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <span className="font-bold">{SPEAKER_LABEL[entry.speaker]}</span>{" "}
-                    {toneLabel && <span className="font-semibold">({toneLabel}) </span>}
-                    <time dateTime={entry.at} className="text-muted">
-                      {formatTime(entry.at)}
-                    </time>
-                  </p>
-                  <p className="whitespace-pre-wrap break-words">{entry.text}</p>
-                </li>
-              );
-            })}
-          </ol>
+                  entry={entry}
+                  copied={copiedId === entry.id}
+                  onCopy={(target) => void copy(target)}
+                />
+              ))}
+            </ol>
+          )}
+        </div>
+        {hasUnseen && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+            <button
+              type="button"
+              onClick={scrollToLatest}
+              className={`${buttonStyles.secondary} pointer-events-auto min-h-9 rounded-full shadow-elevated`}
+            >
+              <ChevronDownIcon />
+              New messages below. Show latest
+            </button>
+          </div>
         )}
       </div>
-      {hasUnseen && (
-        <button type="button" onClick={scrollToLatest} className={buttonStyles.secondary}>
-          New messages below. Show latest
-        </button>
-      )}
 
       <form onSubmit={handleSubmit} noValidate className="space-y-2">
-        <label htmlFor={inputId} className="block font-semibold">
+        <label htmlFor={inputId} className={labelStyles}>
           Message AccessPilot
         </label>
-        <p id={hintId} className="text-sm text-muted">
-          {busy
-            ? "You can send a message when the current task finishes. To change course now, press Stop."
-            : "Send a new goal for the same website, like “Now find the deadline.”"}
-        </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div
+          className={`flex items-center gap-2 rounded-card border bg-elevated p-1.5 pl-4 transition-[border-color,box-shadow] duration-150 focus-within:border-accent focus-within:ring-[3px] focus-within:ring-focus/25 ${error ? "border-danger" : "border-border-strong"} ${busy ? "opacity-60" : ""}`}
+        >
           <input
             id={inputId}
             type="text"
@@ -163,14 +268,26 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
             onChange={(event) => setDraft(event.target.value)}
             aria-describedby={error ? `${hintId} ${errorId}` : hintId}
             aria-invalid={error ? true : undefined}
-            className={inputStyles}
+            placeholder={busy ? "Waiting for the task to finish…" : "Ask a follow-up…"}
+            className="min-h-10 min-w-0 flex-1 bg-transparent text-[15px] text-fg placeholder:text-muted focus:outline-none disabled:cursor-not-allowed"
           />
-          <button type="submit" disabled={busy} className={buttonStyles.secondary}>
-            Send
+          <button
+            type="submit"
+            disabled={busy}
+            aria-label="Send"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-control bg-accent text-on-accent transition-[filter,opacity] duration-150 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-[18px]"
+          >
+            <ArrowUpIcon />
           </button>
         </div>
+        <p id={hintId} className={hintStyles}>
+          {busy
+            ? "You can send a message when the current task finishes. To change course now, press Stop."
+            : "Send a new goal for the same website, like “Now find the deadline.”"}
+        </p>
         {error && (
-          <p id={errorId} className="font-semibold text-danger">
+          <p id={errorId} className={errorTextStyles}>
+            <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
             {error}
           </p>
         )}
