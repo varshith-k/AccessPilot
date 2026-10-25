@@ -38,6 +38,7 @@ function reply(text: string) {
 const opts = (fetchImpl: ReturnType<typeof vi.fn>) => ({
   apiKey: "k",
   fetchImpl: fetchImpl as unknown as typeof fetch,
+  retryDelaysMs: [0, 0],
 });
 /** The request body of the nth call, parsed. */
 function sentBody(f: ReturnType<typeof vi.fn>, n = 0) {
@@ -109,10 +110,27 @@ describe("planTask", () => {
     expect(f).toHaveBeenCalledTimes(2);
   });
 
-  it("surfaces API errors without retrying", async () => {
+  it("does not retry a request that can never work", async () => {
+    const f = vi.fn().mockImplementation(async () => new Response("bad", { status: 400 }));
+    await expect(planTask("goal", "page", undefined, opts(f))).rejects.toThrow(/400/);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries transient failures (500, the spurious 404, 429) and then succeeds", async () => {
+    const f = vi
+      .fn()
+      .mockImplementationOnce(async () => new Response("oops", { status: 500 }))
+      .mockImplementationOnce(async () => new Response("gone?", { status: 404 }))
+      .mockImplementationOnce(async () => reply(JSON.stringify(validPlan)));
+    const plan = await planTask("goal", "page", undefined, opts(f));
+    expect(plan.intent).toBe("fill_application");
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+
+  it("gives up after three attempts at a transient failure", async () => {
     const f = vi.fn().mockImplementation(async () => new Response("quota", { status: 429 }));
     await expect(planTask("goal", "page", undefined, opts(f))).rejects.toThrow(/429/);
-    expect(f).toHaveBeenCalledTimes(1);
+    expect(f).toHaveBeenCalledTimes(3);
   });
 
   it("wraps network failures", async () => {

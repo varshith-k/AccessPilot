@@ -381,15 +381,28 @@ describe("failure handling", () => {
     });
   });
 
-  it("fails recoverably with a plain message when planning fails", async () => {
-    const { deps } = makeDeps([done()]);
+  it("keeps going without a plan when the planner is down, leaking nothing", async () => {
+    const { deps, execute } = makeDeps([act(click("a", 1, 1, "Next")), done("Finished.")]);
     deps.planner.planTask = async () => {
       throw new Error("quota exceeded for key AIzaSECRET");
     };
     const run = start(deps);
     await run.finished;
-    expect(run.last()).toMatchObject({ code: "planning_failed", recoverable: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(run.last()).toMatchObject({ type: "task.completed", summary: "Finished." });
     expect(JSON.stringify(run.task.events)).not.toContain("AIzaSECRET");
+  });
+
+  it("still asks for approval for consequential actions without a plan", async () => {
+    const { deps, execute } = makeDeps([act(click("s", 1, 1, "Submit", true)), done()]);
+    deps.planner.planTask = async () => {
+      throw new Error("down");
+    };
+    const run = start(deps);
+    await run.waitFor("approval.required");
+    expect(execute).not.toHaveBeenCalled();
+    run.store.stop(run.task.id);
+    await run.finished;
   });
 
   it("asks the user to clarify instead of guessing", async () => {

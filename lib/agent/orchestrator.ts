@@ -255,12 +255,16 @@ export async function runTask(
       plan = await guard(deps.planner.planTask(input.goal, pageText, deps.userDetails));
     } catch (error) {
       if (error instanceof AbortedError) throw error;
-      fail(
-        "planning_failed",
-        "I couldn't work out a plan for that. Please try again or word it differently.",
-        true,
-      );
-      return;
+      // The plan helps narration and progress, but the safety rules live here, not in the plan, and
+      // the action provider reads the page itself. So a planner outage is not the end of the task.
+      plan = {
+        intent: "other",
+        summary: `I'll work on this step by step: ${input.goal}`,
+        steps: [{ id: 1, description: input.goal, requiresConfirmation: true }],
+        missingInfo: [],
+        requiresConfirmation: true,
+        clarifyingQuestion: null,
+      };
     }
     if (plan.clarifyingQuestion) {
       fail("needs_clarification", plan.clarifyingQuestion, true);
