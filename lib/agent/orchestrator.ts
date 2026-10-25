@@ -71,8 +71,13 @@ function host(url: string): string {
 }
 
 /** Never includes typed text: descriptions go into events and logs. */
-function describe(action: BrowserAction, past: boolean): string {
-  const label = action.label?.trim();
+/**
+ * `field` is the control last clicked, for typing that carries no label of its own: without it the
+ * narration model guesses which field was filled, and guesses wrong.
+ */
+function describe(action: BrowserAction, past: boolean, field?: string): string {
+  const fieldName = field?.replace(/\s*\((?:required|optional)\)\s*$/i, "").trim();
+  const label = action.label?.trim() || (action.type === "type" ? fieldName : undefined);
   switch (action.type) {
     case "click":
     case "double_click":
@@ -423,7 +428,12 @@ export async function runTask(
         });
       }
       const totalSteps = Math.max(plan.steps.length, step);
-      ctl.emit({ type: "step.started", step, description: describe(action, false), totalSteps });
+      ctl.emit({
+        type: "step.started",
+        step,
+        description: describe(action, false, lastTarget),
+        totalSteps,
+      });
 
       // Passwords, card numbers and CAPTCHAs are the user's to handle.
       const handoff = detectHandoff(action, obs.pageContext, lastTarget);
@@ -513,7 +523,7 @@ export async function runTask(
           return;
         }
         await say(
-          { kind: "action_failed", detail: describe(action, true) },
+          { kind: "action_failed", detail: describe(action, true, lastTarget) },
           "That didn't work. I'll try another way.",
         );
         // A failed result usually carries the page as it is now; otherwise look again.
@@ -530,7 +540,7 @@ export async function runTask(
         lastTarget = undefined;
       }
 
-      const done = describe(action, true);
+      const done = describe(action, true, lastTarget);
       ctl.emit({
         type: "step.completed",
         step,
