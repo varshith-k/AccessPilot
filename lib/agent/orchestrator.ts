@@ -272,6 +272,28 @@ export async function runTask(
       fail("needs_clarification", plan.clarifyingQuestion, true);
       return;
     }
+
+    // A question about the page ("how many fields are there?") is answered, not acted on. The model
+    // sees an outline of the whole page, not just the part in view. If answering fails, fall through
+    // and let the action provider work on it as usual.
+    if (plan.intent === "explain_page" && deps.planner.explainPage) {
+      let outline = pageText;
+      try {
+        if (browser.outline) outline = await guard(browser.outline());
+      } catch (error) {
+        if (error instanceof AbortedError) throw error;
+      }
+      let answer = "";
+      try {
+        answer = (await guard(deps.planner.explainPage(outline, input.goal))).trim();
+      } catch (error) {
+        if (error instanceof AbortedError) throw error;
+      }
+      if (answer) {
+        ctl.emit({ type: "task.completed", summary: answer });
+        return;
+      }
+    }
     await say({ kind: "started", detail: plan.summary }, plan.summary);
 
     const known = new Set(Object.keys(deps.userDetails ?? {}).map((k) => k.toLowerCase()));

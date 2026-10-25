@@ -54,6 +54,8 @@ export interface Planner {
   planTask(goal: string, pageContext: string, userDetails?: Record<string, string>): Promise<Plan>;
   mapPage(pageContext: string): Promise<PageMap>;
   narrate(progress: Progress): Promise<{ text: string; priority: NarrationPriority }>;
+  /** Answers a question about the page ("how many fields are there?") from a text outline of it. */
+  explainPage?(pageText: string, question: string): Promise<string>;
 }
 
 // ---- Twinly (lib/twinly) -----------------------------------------------------------------------
@@ -96,6 +98,11 @@ export interface BrowserDriver {
   open(url: string, signal?: AbortSignal): Promise<Observation>;
   observe(): Promise<Observation>;
   execute: ExecuteBrowserAction;
+  /**
+   * A read-only text outline of the whole page (headings, every form field and button, with labels,
+   * never values), not just the part in view. Used to answer questions about the page.
+   */
+  outline?(): Promise<string>;
   /** Cancels whatever the browser is doing right now and refuses further work. Safe to call at any time. */
   stop?(): Promise<void>;
   close(): Promise<void>;
