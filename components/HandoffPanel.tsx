@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef } from "react";
 import type { Handoff } from "@/lib/client/taskState";
-import { buttonStyles, panelStyles } from "./ui/styles";
+import { HandIcon } from "./ui/icons";
+import { buttonStyles } from "./ui/styles";
 
 export interface HandoffPanelProps {
   handoff: Handoff;
@@ -28,18 +29,33 @@ export function HandoffPanel({ handoff, onContinue, onStop }: HandoffPanelProps)
   }, [handoff]);
 
   return (
-    <section className={`${panelStyles} space-y-3 border-2 border-warning`}>
-      <h2 ref={headingRef} id={`${id}-heading`} tabIndex={-1} className="text-xl font-bold">
-        Your turn
-      </h2>
-      <p>{REASON_TEXT[handoff.reason]}</p>
-      <p className="font-semibold">{handoff.instructions}</p>
-      <p className="text-sm text-muted">
-        The browser window is the separate window AccessPilot opened for this task. Switch to it
-        with Alt+Tab (Command+Tab on a Mac), finish the step there, then come back. AccessPilot is
-        waiting and will not do anything until you press Continue or say “continue”.
-      </p>
-      <div className="flex flex-wrap gap-3">
+    <section
+      aria-labelledby={`${id}-heading`}
+      className="animate-enter space-y-4 rounded-card border border-warning/50 bg-warning-soft p-5"
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-warning/40 bg-elevated text-warning">
+          <HandIcon className="size-[18px]" />
+        </span>
+        <div className="min-w-0 space-y-1.5">
+          <h2
+            ref={headingRef}
+            id={`${id}-heading`}
+            tabIndex={-1}
+            className="text-base font-semibold focus:outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+          >
+            Your turn
+          </h2>
+          <p className="text-sm">{REASON_TEXT[handoff.reason]}</p>
+          <p className="text-sm font-medium">{handoff.instructions}</p>
+          <p className="text-[13px] text-fg/75">
+            The browser window is the separate window AccessPilot opened for this task. Switch to it
+            with Alt+Tab (Command+Tab on a Mac), finish the step there, then come back. AccessPilot
+            is waiting and will not do anything until you press Continue or say “continue”.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2 sm:pl-12">
         <button type="button" onClick={onContinue} className={buttonStyles.primary}>
           Continue
         </button>

@@ -3,7 +3,8 @@
 import { useId } from "react";
 import type { RecognitionError } from "@/hooks/useSpeechRecognition";
 import { SHORTCUT_LABELS } from "@/hooks/useKeyboardShortcuts";
-import { buttonStyles, shortcutHint } from "./ui/styles";
+import { AlertIcon, MicIcon } from "./ui/icons";
+import { errorTextStyles, hintStyles, shortcutHint } from "./ui/styles";
 
 export interface VoiceControlProps {
   supported: boolean;
@@ -30,15 +31,15 @@ export function VoiceControl({
 
   if (!supported) {
     return (
-      <p className="text-muted">
-        <span aria-hidden="true">🎤 </span>
+      <p className={`${hintStyles} flex items-center gap-2`}>
+        <MicIcon className="size-4 shrink-0" />
         {VOICE_UNSUPPORTED_MESSAGE}
       </p>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -46,39 +47,50 @@ export function VoiceControl({
           aria-pressed={listening}
           aria-keyshortcuts={SHORTCUT_LABELS.mic}
           aria-describedby={hintId}
-          className={`${listening ? buttonStyles.primary : buttonStyles.secondary} min-h-12 min-w-12`}
+          className={`inline-flex min-h-11 max-w-full flex-wrap items-center justify-center gap-x-2 rounded-full border px-4 text-center text-sm font-medium break-words transition-[background-color,border-color,color] duration-150 [&_svg]:size-4 ${
+            listening
+              ? "border-accent bg-accent text-on-accent"
+              : "border-border-strong/60 bg-elevated text-fg hover:bg-hover"
+          }`}
         >
-          <span aria-hidden="true">🎤</span>
-          Microphone <span className={shortcutHint}>({SHORTCUT_LABELS.mic})</span>
+          <MicIcon />
+          Microphone{" "}
+          <span className={`text-xs ${shortcutHint} ${listening ? "opacity-80" : "text-muted"}`}>
+            ({SHORTCUT_LABELS.mic})
+          </span>
         </button>
-        <p className="font-semibold">
+        <p className="flex items-center gap-2 text-sm font-medium">
           {listening ? (
             <>
-              <span aria-hidden="true">● </span>Listening… press again when you finish
+              <span aria-hidden="true" className="relative flex size-2.5">
+                <span className="absolute inset-0 animate-ping rounded-full bg-accent opacity-60 motion-reduce:animate-none" />
+                <span className="relative size-2.5 rounded-full bg-accent" />
+              </span>
+              Listening… press again when you finish
             </>
           ) : (
-            "Not listening"
+            <span className="text-muted">Not listening</span>
           )}
         </p>
       </div>
-      <p id={hintId} className="text-sm text-muted">
+      <p id={hintId} className={hintStyles}>
         Say your goal, or a command: “stop”, “repeat”, or “what&apos;s on this page”. While asked to
         approve, say “approve” or “don&apos;t submit”.
       </p>
       {listening && interim !== "" && (
-        <p>
-          <span className="font-semibold">Hearing: </span>
-          {interim}
+        <p className="rounded-control border border-dashed border-accent/40 bg-accent-soft/50 px-3 py-2 text-sm">
+          <span className="font-medium">Hearing: </span>
+          <span className="text-muted">{interim}</span>
         </p>
       )}
       {!listening && transcript !== "" && (
-        <p>
-          <span className="font-semibold">Heard: </span>“{transcript}”
+        <p className="rounded-control border border-border bg-subtle px-3 py-2 text-sm">
+          <span className="font-medium">Heard: </span>“{transcript}”
         </p>
       )}
       {error && (
-        <p className="font-semibold text-danger">
-          <span aria-hidden="true">⚠ </span>
+        <p className={errorTextStyles}>
+          <AlertIcon className="mt-0.5 size-3.5 shrink-0" />
           {error.message}
         </p>
       )}

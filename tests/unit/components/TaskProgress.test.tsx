@@ -16,10 +16,10 @@ describe("TaskProgress", () => {
     const { container } = render(<TaskProgress steps={steps} totalSteps={4} stillWorking={null} />);
     const items = within(screen.getByRole("list", { name: "Steps" })).getAllByRole("listitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "✓Step 1: Filled in your name — Done",
-      "▸Step 2: Filling in your email — In progress",
-      "○Step 3 — Not started",
-      "○Step 4 — Not started",
+      "Step 1: Filled in your name — Done",
+      "Step 2: Filling in your email — In progress",
+      "Step 3 — Not started",
+      "Step 4 — Not started",
     ]);
     expect(items[1]).toHaveAttribute("aria-current", "step");
     expect(items[0]).not.toHaveAttribute("aria-current");

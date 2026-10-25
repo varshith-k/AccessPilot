@@ -82,6 +82,7 @@ describe("AccessPilotApp voice", () => {
     await user.click(screen.getByRole("button", { name: "I use a screen reader" }));
     expect(screen.queryByRole("heading", { name: /Do you use your own screen reader/ })).toBeNull();
     expect(screen.getByRole("heading", { name: "Start a task" })).toHaveFocus();
+    await user.click(screen.getAllByRole("button", { name: "Settings" })[0]!);
     expect(screen.getByRole("checkbox", { name: "I use my own screen reader" })).toBeChecked();
     unmount();
 
@@ -262,6 +263,7 @@ describe("AccessPilotApp voice", () => {
   it("Test voice speaks a sample and settings changes apply", async () => {
     const { user } = renderApp();
     await user.click(screen.getByRole("button", { name: "Read aloud for me" }));
+    await user.click(screen.getAllByRole("button", { name: "Settings" })[0]!);
     await user.click(screen.getByRole("button", { name: "Test voice" }));
     expect(synth.texts.at(-1)).toBe("This is how AccessPilot sounds.");
     await user.click(screen.getByRole("checkbox", { name: "Read narration aloud" }));
