@@ -146,6 +146,27 @@ describe("Chat", () => {
     expect(region.scrollTop).toBe(1300);
   });
 
+  it("on phones shows a copy button only on the newest AccessPilot message", () => {
+    renderWithAnnouncer(
+      <Chat
+        entries={[
+          entry(1),
+          entry(2, { speaker: "user" }),
+          entry(3),
+          entry(4, { speaker: "system" }),
+        ]}
+        busy={false}
+        onSend={vi.fn()}
+      />,
+    );
+    const controls = screen.getAllByTestId("copy-control");
+    expect(controls).toHaveLength(2);
+    // Older messages hide their copy button below the sm breakpoint; it still shows on hover above it.
+    expect(controls[0]).toHaveClass("max-sm:hidden");
+    expect(controls[1]).not.toHaveClass("max-sm:hidden");
+    expect(controls[1]).toHaveClass("max-sm:opacity-60");
+  });
+
   it("shows no time for an invalid timestamp", () => {
     renderWithAnnouncer(
       <Chat entries={[entry(1, { at: "not a date" })]} busy={false} onSend={vi.fn()} />,

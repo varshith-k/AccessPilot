@@ -93,7 +93,11 @@ export function AccessPilotApp({ client }: AccessPilotAppProps) {
 /** A dictated website address ("example.org/apply", "https://…"), normalized to https. */
 function asWebAddress(text: string): string | null {
   const candidate = text.trim().replace(/[.,!?]$/, "");
-  if (!/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(candidate)) return null;
+  // The local demo site ("localhost:4000/scholarship"); only http is allowed for localhost.
+  if (/^(https?:\/\/)?localhost(:\d{1,5})?(\/\S*)?$/i.test(candidate)) {
+    return /^https?:\/\//i.test(candidate) ? candidate : `http://${candidate}`;
+  }
+  if (!/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(:\d{1,5})?(\/\S*)?$/i.test(candidate)) return null;
   return /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
 }
 

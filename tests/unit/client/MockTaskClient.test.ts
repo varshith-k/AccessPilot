@@ -2,7 +2,7 @@ import { taskEventSchema, type TaskEvent } from "@/lib/contracts";
 import { MockTaskClient } from "@/lib/client/MockTaskClient";
 import { TaskClientError } from "@/lib/client/errors";
 import {
-  DEMO_FOLLOW_UP_SUMMARY,
+  DEMO_FOLLOW_UP_MESSAGE,
   MOCK_SCENARIO_NAMES,
   type MockScenarioName,
 } from "@/lib/client/mock/scenarios";
@@ -138,8 +138,14 @@ describe("MockTaskClient scenarios", () => {
       () => undefined,
     );
     await settle();
-    expect(types(after)).toEqual(["task.started", "narration", "task.completed"]);
-    expect(after.at(-1)).toMatchObject({ summary: DEMO_FOLLOW_UP_SUMMARY });
+    // A refusal, not a success: an unrecoverable failure whose message fits the status line.
+    expect(types(after)).toEqual(["task.started", "narration", "task.failed"]);
+    expect(after.at(-1)).toMatchObject({
+      code: "demo_unsupported",
+      message: DEMO_FOLLOW_UP_MESSAGE,
+      recoverable: false,
+    });
+    expect(DEMO_FOLLOW_UP_MESSAGE.length).toBeLessThan(160);
     expect(after.some((event) => event.type === "approval.required")).toBe(false);
   });
 
