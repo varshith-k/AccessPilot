@@ -95,7 +95,10 @@ describe("BrowserPreview", () => {
     const image = screen.getByRole("img", { name: "Screenshot description 2" });
     expect(image).toHaveAttribute("src", mockScreenshots.formName);
     expect(screen.getByText("Screenshot 3 of 3, from step 2 (latest)")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Next screenshot" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next screenshot" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -105,7 +108,12 @@ describe("BrowserPreview", () => {
     await user.click(screen.getByRole("button", { name: "Previous screenshot" }));
     await user.click(screen.getByRole("button", { name: "Previous screenshot" }));
     expect(screen.getByText("Screenshot 1 of 3, before the first step")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Previous screenshot" })).toBeDisabled();
+    const previous = screen.getByRole("button", { name: "Previous screenshot" });
+    expect(previous).toHaveAttribute("aria-disabled", "true");
+    // Stays focusable at the first screenshot, and pressing it again does nothing.
+    expect(previous).toHaveFocus();
+    await user.click(previous);
+    expect(screen.getByText("Screenshot 1 of 3, before the first step")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Show latest" }));
     expect(screen.getByText("Screenshot 3 of 3, from step 2 (latest)")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Previous screenshot" }));

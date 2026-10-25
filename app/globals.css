@@ -158,6 +158,8 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* With very large text, break long words instead of scrolling sideways (WCAG reflow). */
+  overflow-wrap: anywhere;
 }
 
 ::selection {
@@ -166,13 +168,29 @@ body {
 }
 
 /*
- * While a task runs the status card sticks to the top of the conversation on viewports tall
- * enough for it (not at high zoom). Keep focused elements from scrolling underneath it.
+ * While a task runs the status card sticks to the top of the conversation when it fits in under
+ * 30% of the screen (see useStickyFits; large text or zoom turns it off). Keep focused elements
+ * from scrolling underneath it.
  */
-@media (min-height: 36rem) {
-  html[data-task-active],
-  html[data-task-active] #main {
-    scroll-padding-top: 11rem;
+html[data-task-active],
+html[data-task-active] #main {
+  scroll-padding-top: 32vh;
+}
+
+/* Keep the progress bar visible in Windows high-contrast (forced colors) mode. */
+@media (forced-colors: active) {
+  progress {
+    border: 1px solid CanvasText;
+    background: Canvas;
+  }
+  progress::-webkit-progress-bar {
+    background: Canvas;
+  }
+  progress::-webkit-progress-value {
+    background: Highlight;
+  }
+  progress::-moz-progress-bar {
+    background: Highlight;
   }
 }
 

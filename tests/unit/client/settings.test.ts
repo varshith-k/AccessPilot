@@ -101,11 +101,11 @@ describe("createSettingsStore", () => {
     expect(none.getSnapshot().rate).toBe(1.2);
   });
 
-  it("uses defaults for the server snapshot", () => {
+  it("renders defaults on the server, without the first-run question", () => {
     const store = createSettingsStore(() =>
       memoryStorage({ [SETTINGS_STORAGE_KEY]: JSON.stringify({ rate: 2 }) }),
     );
-    expect(store.getServerSnapshot()).toEqual(DEFAULT_SETTINGS);
+    expect(store.getServerSnapshot()).toEqual({ ...DEFAULT_SETTINGS, firstRunDone: true });
   });
 
   it("picks up changes made in another tab", () => {

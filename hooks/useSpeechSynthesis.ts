@@ -14,13 +14,20 @@ export interface SpeechSynthesisOptions {
 export interface SpeechSynthesisControls {
   supported: boolean;
   voices: readonly SpeechSynthesisVoice[];
-  /** Polite text waits its turn; assertive text interrupts and clears the queue. */
-  speak(text: string, priority: NarrationPriority): void;
+  /**
+   * Polite text waits its turn; assertive text interrupts and clears the queue. `front` puts
+   * polite text ahead of anything already queued, for direct answers to the user.
+   */
+  speak(text: string, priority: NarrationPriority, options?: SpeakOptions): void;
   /** Silences everything immediately and clears the queue. */
   cancel(): void;
   /** While held (e.g. the microphone is listening) nothing plays; queued text waits. */
   hold(held: boolean): void;
   isSpeaking(): boolean;
+}
+
+export interface SpeakOptions {
+  front?: boolean;
 }
 
 function getSynth(): SpeechSynthesis | null {
@@ -124,11 +131,12 @@ export function useSpeechSynthesis(options: SpeechSynthesisOptions): SpeechSynth
   }, []);
 
   const speak = useCallback(
-    (raw: string, priority: NarrationPriority) => {
+    (raw: string, priority: NarrationPriority, speakOptions?: SpeakOptions) => {
       const text = raw.trim();
       if (text === "" || !optionsRef.current.enabled || !getSynth()) return;
       if (priority === "assertive") cancel();
-      queue.current.push({ text });
+      if (speakOptions?.front) queue.current.unshift({ text });
+      else queue.current.push({ text });
       playNext();
     },
     [cancel, playNext],

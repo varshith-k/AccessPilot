@@ -80,8 +80,11 @@ export function TaskForm({
 
   const describedBy = (...parts: (string | false)[]) => parts.filter(Boolean).join(" ");
 
+  // POST keeps the typed goal out of the URL and history if the form is submitted before the
+  // page's scripts load; afterwards onSubmit handles everything.
   return (
     <form
+      method="post"
       noValidate
       onSubmit={handleSubmit}
       className="space-y-4"
@@ -132,12 +135,19 @@ export function TaskForm({
           value={goal}
           placeholder="Describe the task in your own words…"
           onChange={(event) => onGoalChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           aria-invalid={errors.goal ? true : undefined}
           aria-describedby={describedBy(ids.goalHint, Boolean(errors.goal) && ids.goalError)}
           className={`${inputStyles} min-h-24 resize-y leading-6`}
         />
         <p id={ids.goalHint} className={hintStyles}>
-          For example: Help me complete this scholarship application.
+          For example: Help me complete this scholarship application. Press Enter to start, or
+          Shift+Enter for a new line.
         </p>
         {errors.goal && (
           <p id={ids.goalError} className={errorTextStyles}>

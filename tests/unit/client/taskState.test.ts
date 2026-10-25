@@ -73,7 +73,7 @@ const EVENT_MATRIX: Record<TaskEventType, Partial<Record<FixtureName, TaskStatus
     awaiting_approval: "awaiting_approval",
     awaiting_user: "awaiting_user",
   },
-  "approval.required": { running: "awaiting_approval" },
+  "approval.required": { planning: "awaiting_approval", running: "awaiting_approval" },
   "user_input.required": { planning: "awaiting_user", running: "awaiting_user" },
   "task.completed": { planning: "completed", running: "completed" },
   "task.failed": {
@@ -466,14 +466,15 @@ describe("UI action effects", () => {
       expect(result.state.log).toBe(state.log);
     });
 
-    it("stop_failed clears stopping and explains", () => {
+    it("stop_failed still stops the UI and explains the server may not have stopped", () => {
       const state = reach(
         [makeUiAction("ui/stop_requested"), makeUiAction("ui/stop_failed")],
-        running(),
+        awaitingApproval(),
       );
       expect(state.stopping).toBe(false);
-      expect(state.status).toBe("running");
-      expect(state.log.at(-1)?.tone).toBe("error");
+      expect(state.status).toBe("stopped");
+      expect(state.approval).toBeNull();
+      expect(state.log.at(-1)).toMatchObject({ text: "Something failed.", tone: "warning" });
     });
   });
 

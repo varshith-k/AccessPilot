@@ -5,7 +5,12 @@ import { MockTaskClient } from "@/lib/client/MockTaskClient";
 import type { MockScenarioName, ScriptedEvent } from "@/lib/client/mock/scenarios";
 import { STOPPED_BY_USER_TEXT } from "@/lib/client/taskState";
 import type { TaskClient } from "@/lib/client/types";
-import { useTaskSession, type SessionEffects } from "@/hooks/useTaskSession";
+import {
+  STOP_UNCONFIRMED_TEXT,
+  TASK_GONE_TEXT,
+  useTaskSession,
+  type SessionEffects,
+} from "@/hooks/useTaskSession";
 
 const INPUT = {
   url: "http://localhost:4000/scholarship",
@@ -343,22 +348,15 @@ describe("useTaskSession with a stub client", () => {
     expect(result.current.state.status).toBe("stopped");
   });
 
-  it("a failed stop explains what to do and allows another try", async () => {
+  it("a stop the server can't confirm still stops the UI and says the server may not have", async () => {
     const { client, result, effects } = await startStub();
-    client.stop.mockRejectedValueOnce(httpError("Couldn't confirm. Press Stop again."));
-    await act(async () => {
-      await result.current.stop();
-    });
-    expect(result.current.state.status).toBe("planning");
-    expect(result.current.state.stopping).toBe(false);
-    expect(effects.announce).toHaveBeenLastCalledWith(
-      "Couldn't confirm. Press Stop again.",
-      "assertive",
-    );
+    client.stop.mockRejectedValueOnce(httpError("Not found"));
     await act(async () => {
       await result.current.stop();
     });
     expect(result.current.state.status).toBe("stopped");
+    expect(result.current.state.stopping).toBe(false);
+    expect(effects.announce).toHaveBeenLastCalledWith(STOP_UNCONFIRMED_TEXT, "assertive");
   });
 
   it("stop is ignored when nothing is running", async () => {
@@ -401,7 +399,9 @@ describe("useTaskSession with a stub client", () => {
 
   it("restores the approval dialog when sending the decision fails", async () => {
     const stub = await reachApproval();
-    stub.client.approve.mockRejectedValue(httpError("Couldn't send your answer."));
+    stub.client.approve.mockRejectedValue(
+      new TaskClientError({ kind: "network", message: "Couldn't send your answer." }),
+    );
     await act(async () => {
       await stub.result.current.approve();
     });
@@ -424,12 +424,80 @@ describe("useTaskSession with a stub client", () => {
   it("restores the hand-off when resume fails", async () => {
     const stub = await startStub();
     stub.send({ type: "user_input.required", reason: "captcha", instructions: "Solve it." });
-    stub.client.resume.mockRejectedValue(httpError("Couldn't continue."));
+    stub.client.resume.mockRejectedValue(
+      new TaskClientError({ kind: "http", status: 503, message: "Couldn't continue." }),
+    );
     await act(async () => {
       await stub.result.current.resume();
     });
     expect(stub.result.current.state.status).toBe("awaiting_user");
     expect(stub.result.current.state.handoff?.reason).toBe("captcha");
+  });
+
+  it("a 409 on approve means the server moved on: no second question, wait for its update", async () => {
+    const stub = await reachApproval();
+    stub.client.approve.mockRejectedValue(
+      httpError("This task is no longer waiting for approval."),
+    );
+    await act(async () => {
+      await stub.result.current.approve();
+    });
+    expect(stub.result.current.state.status).toBe("running");
+    expect(stub.result.current.state.approval).toBeNull();
+    expect(stub.effects.announce).toHaveBeenLastCalledWith(
+      "This task is no longer waiting for approval.",
+      "assertive",
+    );
+  });
+
+  it("a 404 on deny or resume means the task is gone: the task ends instead of trapping the user", async () => {
+    const gone = new TaskClientError({
+      kind: "http",
+      status: 404,
+      message: "That task no longer exists.",
+    });
+    const stub = await reachApproval();
+    stub.client.deny.mockRejectedValue(gone);
+    await act(async () => {
+      await stub.result.current.deny();
+    });
+    expect(stub.result.current.state.status).toBe("failed");
+    expect(stub.result.current.state.error?.message).toBe(TASK_GONE_TEXT);
+
+    const handoff = await startStub();
+    handoff.send({ type: "user_input.required", reason: "login", instructions: "Sign in." });
+    handoff.client.resume.mockRejectedValue(gone);
+    await act(async () => {
+      await handoff.result.current.resume();
+    });
+    expect(handoff.result.current.state.status).toBe("failed");
+  });
+
+  it("a 409 on resume waits for the server instead of reopening the hand-off", async () => {
+    const stub = await startStub();
+    stub.send({ type: "user_input.required", reason: "login", instructions: "Sign in." });
+    stub.client.resume.mockRejectedValue(httpError("Already resumed."));
+    await act(async () => {
+      await stub.result.current.resume();
+    });
+    expect(stub.result.current.state.status).toBe("running");
+    expect(stub.result.current.state.handoff).toBeNull();
+  });
+
+  it("a start the server rejects as invalid is not offered as retryable", async () => {
+    const stub = stubClient();
+    stub.client.start.mockRejectedValue(
+      new TaskClientError({
+        kind: "http",
+        status: 400,
+        message: "Keep the goal under 1000 characters.",
+      }),
+    );
+    const { result } = renderSession(stub.client);
+    await act(async () => {
+      await result.current.start(INPUT);
+    });
+    expect(result.current.state.error?.recoverable).toBe(false);
   });
 
   it("resume is ignored when not waiting for the user", async () => {
@@ -499,15 +567,17 @@ describe("useTaskSession with a stub client", () => {
 
   it("repeats the last narration and re-reads the page map", async () => {
     const { send, result, effects } = await startStub();
-    expect(result.current.repeatLastNarration()).toBe(false);
+    expect(result.current.repeatLast()).toBe(false);
     expect(result.current.describePage()).toBe(false);
     send({ type: "page.map", title: "Form", summary: "Has fields.", regions: [] });
     send({ type: "narration", text: "Typing.", priority: "polite" });
     effects.speak.mockClear();
-    expect(result.current.repeatLastNarration()).toBe(true);
-    expect(effects.speak).toHaveBeenLastCalledWith("Typing.", "polite");
+    expect(result.current.repeatLast()).toBe(true);
+    // Replies go ahead of queued narration and are never swallowed as duplicates.
+    expect(effects.speak).toHaveBeenLastCalledWith("Typing.", "polite", { front: true });
+    expect(effects.announce).toHaveBeenLastCalledWith("Typing.", "polite", { force: true });
     expect(result.current.describePage()).toBe(true);
-    expect(effects.speak).toHaveBeenLastCalledWith("Form. Has fields.", "polite");
+    expect(effects.speak).toHaveBeenLastCalledWith("Form. Has fields.", "polite", { front: true });
   });
 
   it("reset returns to idle after a task ends, and retry only works after a failure", async () => {

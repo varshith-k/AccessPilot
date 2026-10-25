@@ -142,6 +142,9 @@ describe("useStillWorking", () => {
     expect(result.current).toBe(
       "Still working. No update for 23 seconds. You can keep waiting or press Stop.",
     );
+    // Shown, but not re-announced within 30 seconds of the last announcement.
+    expect(announce).toHaveBeenCalledTimes(1);
+    act(() => vi.advanceTimersByTime(STILL_WORKING_REPEAT_MS));
     expect(announce).toHaveBeenCalledTimes(2);
 
     rerender({ active: true, key: 2 });
@@ -153,6 +156,19 @@ describe("useStillWorking", () => {
     act(() => vi.advanceTimersByTime(60_000));
     expect(result.current).toBeNull();
     expect(announce).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not flood the live region when the backend has regular gaps", () => {
+    const announce = vi.fn();
+    const { rerender } = renderHook(({ key }) => useStillWorking(true, key, announce), {
+      initialProps: { key: 1 },
+    });
+    for (let key = 2; key <= 9; key++) {
+      act(() => vi.advanceTimersByTime(STILL_WORKING_AFTER_MS + 1000));
+      rerender({ key });
+    }
+    // Eight 9-second gaps (72s) produce at most three announcements, 30s apart.
+    expect(announce.mock.calls.length).toBeLessThanOrEqual(3);
   });
 
   it("words the message by elapsed time", () => {

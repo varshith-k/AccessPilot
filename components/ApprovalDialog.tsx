@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type RefObject, type SyntheticEvent } from "react";
 import type { PendingApproval } from "@/lib/client/taskState";
+import { StatusAnnouncer } from "./StatusAnnouncer";
 import { ShieldIcon } from "./ui/icons";
 import { buttonStyles } from "./ui/styles";
 
@@ -14,6 +15,11 @@ export interface ApprovalDialogProps {
   returnFocusRef: RefObject<HTMLElement | null>;
   /** How to answer by voice, shown when voice input is available. */
   voiceHint?: string | undefined;
+  /**
+   * Microphone control inside the dialog. The page's own microphone button is unreachable while
+   * the modal is open, and voice-control users need something they can click.
+   */
+  voice?: { listening: boolean; error: string | null; onToggle(): void } | undefined;
 }
 
 const dialogStyles =
@@ -29,6 +35,7 @@ export function ApprovalDialog({
   onDeny,
   returnFocusRef,
   voiceHint,
+  voice,
 }: ApprovalDialogProps) {
   const id = useId();
   const headingId = `${id}-heading`;
@@ -72,6 +79,8 @@ export function ApprovalDialog({
     >
       {approval && (
         <div className="space-y-5 p-6">
+          {/* Live regions outside a modal are hidden from screen readers while it is open. */}
+          <StatusAnnouncer local />
           <div className="flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-warning-soft text-warning">
               <ShieldIcon className="size-5" />
@@ -121,6 +130,24 @@ export function ApprovalDialog({
               Approve and submit
             </button>
           </div>
+          {voice && (
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={voice.onToggle}
+                aria-pressed={voice.listening}
+                className={voice.listening ? buttonStyles.primary : buttonStyles.secondary}
+              >
+                Answer by voice
+              </button>
+              <p className="text-[13px] font-medium">
+                {voice.listening ? "Listening… say “approve” or “don't submit”." : "Not listening"}
+              </p>
+              {voice.error && (
+                <p className="w-full text-[13px] font-medium text-danger">{voice.error}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </dialog>

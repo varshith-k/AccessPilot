@@ -7,6 +7,12 @@ export type VoiceCommand =
   | { kind: "repeat" }
   | { kind: "describe_page" }
   | { kind: "continue" }
+  | { kind: "start_task" }
+  | { kind: "clear_goal" }
+  /** An approve or deny phrase when nothing is waiting for approval. */
+  | { kind: "no_approval_pending" }
+  /** A continue phrase when nothing is waiting for the user. */
+  | { kind: "nothing_to_continue" }
   /** Not a command; treat the words as dictation. */
   | { kind: "none"; text: string };
 
@@ -17,12 +23,16 @@ export interface VoiceCommandContext {
 
 /** Lowercase, straighten apostrophes, drop punctuation, and collapse whitespace. */
 export function normalizeTranscript(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[’‘`]/g, "'")
-    .replace(/[^a-z0-9' ]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    text
+      .toLowerCase()
+      .replace(/[’‘`]/g, "'")
+      .replace(/[^a-z0-9' ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      // "yes yes" and "approved approved" mean the same as saying it once.
+      .replace(/\b(\w[\w']*)(?: \1\b)+/g, "$1")
+  );
 }
 
 /**
@@ -50,6 +60,13 @@ const APPROVE_PHRASES = new Set([
   "please submit it",
   "go ahead and submit",
   "go ahead and submit it",
+  "go ahead",
+  "sure",
+  "yes sure",
+  "yeah sure",
+  "i approve this",
+  "i approve it",
+  "approve this",
 ]);
 
 const DENY_PHRASES = new Set([
@@ -76,6 +93,15 @@ const DENY_PHRASES = new Set([
   "no dont submit it",
   "no do not submit it",
   "not now",
+  "nah",
+  "no way",
+  "please don't",
+  "please dont",
+  "please do not",
+  "please don't submit",
+  "please dont submit",
+  "please do not submit",
+  "cancel that",
 ]);
 
 const REPEAT_PHRASES = new Set([
@@ -111,10 +137,22 @@ const CONTINUE_PHRASES = new Set([
   "go on",
 ]);
 
-/** Optional politeness that should not change the meaning. */
+const START_PHRASES = new Set([
+  "start",
+  "start task",
+  "start the task",
+  "start my task",
+  "start it",
+  "begin",
+  "begin the task",
+]);
+
+const CLEAR_GOAL_PHRASES = new Set(["clear goal", "clear the goal", "clear my goal"]);
+
+/** Hesitations and politeness that should not change the meaning. */
 function stripFillers(text: string): string {
   return text
-    .replace(/^(ok |okay |hey accesspilot |accesspilot )+/, "")
+    .replace(/^((ok|okay|uh|uhm|um|umm|er|erm|hmm|so|well|hey accesspilot|accesspilot) )+/, "")
     .replace(/( please| thanks| thank you)+$/, "")
     .trim();
 }
@@ -145,9 +183,14 @@ export function parseVoiceCommand(transcript: string, context: VoiceCommandConte
     return { kind: "unclear_approval" };
   }
 
-  if (context.handoffActive && (CONTINUE_PHRASES.has(phrase) || CONTINUE_PHRASES.has(normalized))) {
-    return { kind: "continue" };
+  const has = (phrases: ReadonlySet<string>) => phrases.has(phrase) || phrases.has(normalized);
+
+  if (has(CONTINUE_PHRASES)) {
+    return context.handoffActive ? { kind: "continue" } : { kind: "nothing_to_continue" };
   }
+  if (has(APPROVE_PHRASES) || has(DENY_PHRASES)) return { kind: "no_approval_pending" };
+  if (has(START_PHRASES)) return { kind: "start_task" };
+  if (has(CLEAR_GOAL_PHRASES)) return { kind: "clear_goal" };
 
   return { kind: "none", text: transcript.trim() };
 }

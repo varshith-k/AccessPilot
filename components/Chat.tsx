@@ -50,6 +50,7 @@ const STICK_THRESHOLD = 48;
 const COPIED_MS = 1500;
 
 const FOLLOW_UP_ERRORS: Record<Exclude<FollowUpResult, { ok: true }>["reason"], string> = {
+  invalid: "That message can't be used as a goal.",
   empty: "Type a message first.",
   busy: "AccessPilot is working on a task. Wait for it to finish, or press Stop.",
   no_url: "Enter a website address in the task form above first, then start a task.",
@@ -62,11 +63,24 @@ function formatTime(iso: string): string {
     : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
 
-function Meta({ entry, align = "start" }: { entry: LogEntry; align?: "start" | "end" }) {
+function Meta({
+  entry,
+  align = "start",
+  hidden = false,
+}: {
+  entry: LogEntry;
+  align?: "start" | "end";
+  /** Visually hidden but still read by screen readers, for follow-on messages in a group. */
+  hidden?: boolean;
+}) {
   const toneLabel = TONE_LABEL[entry.tone];
   return (
     <p
-      className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted ${align === "end" ? "justify-end" : ""}`}
+      className={
+        hidden
+          ? "sr-only"
+          : `flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted ${align === "end" ? "justify-end" : ""}`
+      }
     >
       <span className="font-medium text-fg">{SPEAKER_LABEL[entry.speaker]}</span>{" "}
       {toneLabel && (
@@ -87,9 +101,22 @@ interface MessageProps {
   entry: LogEntry;
   copied: boolean;
   onCopy(entry: LogEntry): void;
+  /** Continues a run of AccessPilot messages: no repeated avatar, name, or time on screen. */
+  grouped: boolean;
 }
 
-function Message({ entry, copied, onCopy }: MessageProps) {
+/** How close together (ms) consecutive AccessPilot messages must be to share one header. */
+const GROUP_WINDOW_MS = 60_000;
+
+function continuesGroup(previous: LogEntry | undefined, entry: LogEntry): boolean {
+  if (!previous || previous.speaker !== "assistant" || entry.speaker !== "assistant") return false;
+  // Messages that carry a label ("Needs attention", "Done") always show their header.
+  if (entry.tone !== "info" || previous.tone !== "info") return false;
+  const gap = Date.parse(entry.at) - Date.parse(previous.at);
+  return Number.isFinite(gap) && gap >= 0 && gap < GROUP_WINDOW_MS;
+}
+
+function Message({ entry, copied, onCopy, grouped }: MessageProps) {
   if (entry.speaker === "user") {
     return (
       <li className="flex animate-enter flex-col items-end gap-1.5">
@@ -117,13 +144,17 @@ function Message({ entry, copied, onCopy }: MessageProps) {
   }
 
   return (
-    <li className="group/message relative flex animate-enter gap-3">
-      <LogoMark className="mt-0.5 size-7" />
+    <li className={`group/message relative flex animate-enter gap-3 ${grouped ? "-mt-3.5" : ""}`}>
+      {grouped ? (
+        <span aria-hidden="true" className="w-7 shrink-0" />
+      ) : (
+        <LogoMark className="mt-0.5 size-7" />
+      )}
       <div className="min-w-0 flex-1 space-y-1 pr-9">
-        <Meta entry={entry} />
+        <Meta entry={entry} hidden={grouped} />
         <p className="whitespace-pre-wrap break-words text-[15px]">{entry.text}</p>
       </div>
-      <div className="absolute -top-1.5 right-0 transition-opacity duration-150 sm:opacity-0 sm:group-focus-within/message:opacity-100 sm:group-hover/message:opacity-100">
+      <div className="absolute -top-1.5 right-0 transition-opacity duration-150 max-sm:opacity-60 sm:opacity-0 sm:group-focus-within/message:opacity-100 sm:group-hover/message:opacity-100">
         <IconButton
           label={copied ? "Copied" : "Copy message"}
           tooltipSide="left"
@@ -187,7 +218,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
       setError(null);
       scrollToLatest();
     } else {
-      const message = FOLLOW_UP_ERRORS[result.reason];
+      const message = "message" in result ? result.message : FOLLOW_UP_ERRORS[result.reason];
       setError(message);
       announce(message, "assertive");
     }
@@ -228,10 +259,11 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
             </div>
           ) : (
             <ol className="space-y-5">
-              {entries.map((entry) => (
+              {entries.map((entry, index) => (
                 <Message
                   key={entry.id}
                   entry={entry}
+                  grouped={continuesGroup(entries[index - 1], entry)}
                   copied={copiedId === entry.id}
                   onCopy={(target) => void copy(target)}
                 />
@@ -253,7 +285,7 @@ export function Chat({ entries, busy, onSend }: ChatProps) {
         )}
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="space-y-2">
+      <form method="post" onSubmit={handleSubmit} noValidate className="space-y-2">
         <label htmlFor={inputId} className={labelStyles}>
           Message AccessPilot
         </label>

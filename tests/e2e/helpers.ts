@@ -16,6 +16,8 @@ export async function openScenario(page: Page, scenario: Scenario, { firstRun = 
   }
   await page.goto(`/?mock=${scenario}&mockSpeed=0.05`);
   await expect(page.getByRole("heading", { level: 1, name: "AccessPilot" })).toBeVisible();
+  // The microphone button only renders once React has hydrated, so shortcuts and handlers work.
+  await expect(page.getByRole("button", { name: /^Microphone/ })).toBeVisible();
 }
 
 export async function fillAndStart(page: Page) {

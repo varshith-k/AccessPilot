@@ -85,7 +85,17 @@ export interface TaskError {
 export interface Warning {
   id: string;
   message: string;
+  /** How many times this same warning arrived in a row. */
+  count: number;
 }
+
+/**
+ * Why sending approve, deny, or resume failed:
+ * - `retry`: a temporary problem (network, server error); ask the user again.
+ * - `gone`: the server no longer knows the task; it cannot continue.
+ * - `moved_on`: the server is past this question; wait for its next update.
+ */
+export type ActionFailure = "retry" | "gone" | "moved_on";
 
 export interface TaskState {
   status: TaskStatus;
@@ -103,6 +113,8 @@ export interface TaskState {
   approval: PendingApproval | null;
   /** The decision the user sent and is waiting on, kept so a failed request can restore the dialog. */
   pendingDecision: { decision: "approve" | "deny"; approval: PendingApproval } | null;
+  /** The user declined the last approval for this task, so its ending is "not submitted". */
+  declined: boolean;
   handoff: Handoff | null;
   pendingResume: Handoff | null;
   stopping: boolean;
@@ -117,13 +129,13 @@ export interface TaskState {
 export type UiAction =
   | { type: "ui/start_requested"; url: string; goal: string; at: string }
   | { type: "ui/start_succeeded"; taskId: string }
-  | { type: "ui/start_failed"; message: string; at: string }
+  | { type: "ui/start_failed"; message: string; at: string; recoverable?: boolean }
   | { type: "ui/decision_sent"; decision: "approve" | "deny"; at: string }
   | { type: "ui/decision_succeeded" }
-  | { type: "ui/decision_failed"; message: string; at: string }
+  | { type: "ui/decision_failed"; message: string; at: string; failure: ActionFailure }
   | { type: "ui/resume_sent"; at: string }
   | { type: "ui/resume_succeeded" }
-  | { type: "ui/resume_failed"; message: string; at: string }
+  | { type: "ui/resume_failed"; message: string; at: string; failure: ActionFailure }
   | { type: "ui/stop_requested" }
   | { type: "ui/stop_succeeded"; at: string }
   | { type: "ui/stop_failed"; message: string; at: string }
@@ -151,6 +163,7 @@ export const initialTaskState: TaskState = {
   screenshots: [],
   approval: null,
   pendingDecision: null,
+  declined: false,
   handoff: null,
   pendingResume: null,
   stopping: false,
@@ -197,7 +210,14 @@ function withEventLog(
 }
 
 function withWarning(state: TaskState, message: string): TaskState {
-  const warning = { id: `warning-${state.nextLocalId}`, message };
+  const last = state.warnings.at(-1);
+  if (last?.message === message) {
+    return {
+      ...state,
+      warnings: [...state.warnings.slice(0, -1), { ...last, count: last.count + 1 }],
+    };
+  }
+  const warning = { id: `warning-${state.nextLocalId}`, message, count: 1 };
   return {
     ...state,
     warnings: [...state.warnings, warning].slice(-MAX_WARNINGS),
@@ -239,7 +259,7 @@ const EVENT_ALLOWED_IN: { [T in TaskEventType]: ReadonlySet<TaskStatus> } = {
   "step.completed": new Set(["running"]),
   narration: new Set(["planning", "running", "awaiting_approval", "awaiting_user"]),
   screenshot: new Set(["planning", "running", "awaiting_approval", "awaiting_user"]),
-  "approval.required": new Set(["running"]),
+  "approval.required": new Set(["planning", "running"]),
   "user_input.required": new Set(["planning", "running"]),
   "task.completed": new Set(["planning", "running"]),
   "task.failed": new Set(["starting", "planning", "running", "awaiting_approval", "awaiting_user"]),
@@ -390,7 +410,7 @@ function applyEvent(state: TaskState, event: TaskEvent): TransitionResult {
           event,
           "assistant",
           event.summary,
-          "success",
+          base.declined ? "info" : "success",
         ),
       );
 
@@ -436,8 +456,23 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
         log: state.log,
         nextLocalId: state.nextLocalId,
       };
+      // Mark where a new attempt begins so earlier messages don't read as duplicates.
+      const separated =
+        state.log.length > 0
+          ? withLocalLog(fresh, {
+              speaker: "system",
+              text: "New task.",
+              at: action.at,
+              tone: "info",
+            })
+          : fresh;
       return applied(
-        withLocalLog(fresh, { speaker: "user", text: action.goal, at: action.at, tone: "info" }),
+        withLocalLog(separated, {
+          speaker: "user",
+          text: action.goal,
+          at: action.at,
+          tone: "info",
+        }),
       );
     }
 
@@ -455,7 +490,11 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
         withLocalLog(
           {
             ...finish(state, "failed"),
-            error: { code: "start_failed", message: action.message, recoverable: true },
+            error: {
+              code: "start_failed",
+              message: action.message,
+              recoverable: action.recoverable ?? true,
+            },
           },
           { speaker: "system", text: action.message, at: action.at, tone: "error" },
         ),
@@ -480,6 +519,7 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
             status: "running",
             approval: null,
             pendingDecision: { decision: action.decision, approval: state.approval },
+            declined: action.decision === "deny",
           },
           { speaker: "user", text, at: action.at, tone: "info" },
         ),
@@ -492,9 +532,27 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
       }
       return applied({ ...state, pendingDecision: null });
 
-    case "ui/decision_failed":
+    case "ui/decision_failed": {
       if (state.pendingDecision === null || state.status !== "running") {
         return ignore(state, "no decision is in flight to roll back");
+      }
+      const log = { speaker: "system" as const, text: action.message, at: action.at };
+      if (action.failure === "gone") {
+        return applied(
+          withLocalLog(
+            {
+              ...finish(state, "failed"),
+              error: { code: "task_gone", message: action.message, recoverable: true },
+            },
+            { ...log, tone: "error" },
+          ),
+        );
+      }
+      if (action.failure === "moved_on") {
+        // Never ask again about a question the server says is closed; wait for its next update.
+        return applied(
+          withLocalLog({ ...state, pendingDecision: null }, { ...log, tone: "warning" }),
+        );
       }
       return applied(
         withLocalLog(
@@ -503,10 +561,12 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
             status: "awaiting_approval",
             approval: state.pendingDecision.approval,
             pendingDecision: null,
+            declined: false,
           },
-          { speaker: "system", text: action.message, at: action.at, tone: "error" },
+          { ...log, tone: "error" },
         ),
       );
+    }
 
     case "ui/resume_sent":
       if (state.status !== "awaiting_user" || state.handoff === null) {
@@ -525,9 +585,26 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
       }
       return applied({ ...state, pendingResume: null });
 
-    case "ui/resume_failed":
+    case "ui/resume_failed": {
       if (state.pendingResume === null || state.status !== "running") {
         return ignore(state, "no resume is in flight to roll back");
+      }
+      const log = { speaker: "system" as const, text: action.message, at: action.at };
+      if (action.failure === "gone") {
+        return applied(
+          withLocalLog(
+            {
+              ...finish(state, "failed"),
+              error: { code: "task_gone", message: action.message, recoverable: true },
+            },
+            { ...log, tone: "error" },
+          ),
+        );
+      }
+      if (action.failure === "moved_on") {
+        return applied(
+          withLocalLog({ ...state, pendingResume: null }, { ...log, tone: "warning" }),
+        );
       }
       return applied(
         withLocalLog(
@@ -537,9 +614,10 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
             handoff: state.pendingResume,
             pendingResume: null,
           },
-          { speaker: "system", text: action.message, at: action.at, tone: "error" },
+          { ...log, tone: "error" },
         ),
       );
+    }
 
     case "ui/stop_requested":
       if (!isActiveStatus(state.status) || state.stopping) {
@@ -559,13 +637,16 @@ function applyUiAction(state: TaskState, action: UiAction): TransitionResult {
       );
 
     case "ui/stop_failed":
-      if (!state.stopping) {
+      // The user asked to stop, so the UI stops even when the server can't confirm it; staying
+      // "running" would trap them behind a task they can no longer control. The message says
+      // the server may not have stopped.
+      if (!state.stopping || !isActiveStatus(state.status)) {
         return ignore(state, "no stop is in flight");
       }
       return applied(
         withLocalLog(
-          { ...state, stopping: false },
-          { speaker: "system", text: action.message, at: action.at, tone: "error" },
+          { ...finish(state, "stopped"), stoppedBy: "user" },
+          { speaker: "system", text: action.message, at: action.at, tone: "warning" },
         ),
       );
 

@@ -147,3 +147,24 @@ describe("useSpeechSynthesis", () => {
     expect(synth.current).toBeNull();
   });
 });
+
+describe("replies", () => {
+  beforeEach(() => {
+    synth = installSpeechSynthesis();
+  });
+
+  it("a front-of-queue reply is spoken before narration that queued while listening", () => {
+    const { result } = renderSpeech();
+    result.current.hold(true);
+    result.current.speak("Typing your name.", "polite");
+    result.current.speak("Typing your email.", "polite");
+    result.current.speak("Scholarship form. This page has a form.", "polite", { front: true });
+    result.current.hold(false);
+    synth.drain();
+    expect(synth.texts).toEqual([
+      "Scholarship form. This page has a form.",
+      "Typing your name.",
+      "Typing your email.",
+    ]);
+  });
+});

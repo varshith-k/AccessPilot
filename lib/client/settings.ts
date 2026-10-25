@@ -24,6 +24,12 @@ export const DEFAULT_SETTINGS: SpeechSettings = {
   firstRunDone: false,
 };
 
+/**
+ * What the server renders before the browser's saved settings are known. The first-run question
+ * appears after hydration for new users instead of flashing away for returning ones.
+ */
+const SERVER_SETTINGS: SpeechSettings = { ...DEFAULT_SETTINGS, firstRunDone: true };
+
 // Each field falls back to its default on its own, so one bad value never resets the rest.
 const storedSettingsSchema = z.object({
   rate: z.number().min(MIN_SPEECH_RATE).max(MAX_SPEECH_RATE).catch(DEFAULT_SETTINGS.rate),
@@ -114,7 +120,7 @@ export function createSettingsStore(getStorage: StorageGetter = browserStorage):
       return current;
     },
     getServerSnapshot() {
-      return DEFAULT_SETTINGS;
+      return SERVER_SETTINGS;
     },
     update(patch) {
       const next = storedSettingsSchema.parse({ ...(current ?? read()), ...patch });

@@ -426,8 +426,11 @@ export class BrowserController {
       await this.interact(action);
       if (this.stopped) return { actionId: action.id, status: "cancelled" };
       await this.session.followPendingRedirect();
+      // Opening a page is not an interaction: writes its scripts attempt while loading were
+      // blocked (nothing reached the server), so they don't fail the navigation.
+      const opening = action.type === "navigate";
       const safety = await readSafetyState(this.session.page, this.guardKey);
-      if (safety.blocked || this.session.blockedMutation)
+      if (!opening && (safety.blocked || this.session.blockedMutation))
         throw new ExecutionError(
           "approval_required_by_page",
           "The page attempted an unapproved submission or request. It was blocked. Inspect the page and propose an action requiring approval.",
@@ -439,7 +442,7 @@ export class BrowserController {
       );
       const observation = this.publicObservation(await this.readObservation());
       const after = await readSafetyState(this.session.page, this.guardKey);
-      if (after.blocked || this.session.blockedMutation)
+      if (!opening && (after.blocked || this.session.blockedMutation))
         throw new ExecutionError(
           "approval_required_by_page",
           "An unapproved submission or request was blocked. Inspect the page before proposing another action.",

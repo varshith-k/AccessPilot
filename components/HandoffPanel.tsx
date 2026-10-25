@@ -38,18 +38,20 @@ export function HandoffPanel({ handoff, onContinue, onStop }: HandoffPanelProps)
           <HandIcon className="size-[18px]" />
         </span>
         <div className="min-w-0 space-y-1.5">
-          <h3
+          <h2
             ref={headingRef}
             id={`${id}-heading`}
             tabIndex={-1}
             className="text-base font-semibold focus:outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           >
             Your turn
-          </h3>
+          </h2>
           <p className="text-sm">{REASON_TEXT[handoff.reason]}</p>
           <p className="text-sm font-medium">{handoff.instructions}</p>
           <p className="text-[13px] text-fg/75">
-            AccessPilot is waiting and will not do anything until you press Continue.
+            The browser window is the separate window AccessPilot opened for this task. Switch to it
+            with Alt+Tab (Command+Tab on a Mac), finish the step there, then come back. AccessPilot
+            is waiting and will not do anything until you press Continue or say “continue”.
           </p>
         </div>
       </div>

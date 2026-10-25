@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { StartTaskRequest } from "@/lib/contracts";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { startTaskRequestSchema, type StartTaskRequest } from "@/lib/contracts";
 import { createTaskClientFromEnvironment } from "@/lib/client/createTaskClient";
 import { HttpTaskClient } from "@/lib/client/HttpTaskClient";
 import { documentTitle, statusSentence } from "@/lib/client/statusText";
@@ -11,11 +19,13 @@ import { isActiveStatus } from "@/lib/client/taskState";
 import type { TaskClient } from "@/lib/client/types";
 import { parseVoiceCommand } from "@/lib/client/voiceCommands";
 import { AnnouncerProvider, useAnnouncer } from "@/hooks/useAnnouncer";
+import { useFocusRescue } from "@/hooks/useFocusRescue";
 import { SHORTCUT_LABELS, useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useSettings } from "@/hooks/useSettings";
 import { profileForTask, profileStore } from "@/lib/client/profile";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { useStickyFits } from "@/hooks/useStickyFits";
 import { useStillWorking } from "@/hooks/useStillWorking";
 import { useStoredFlag } from "@/hooks/useStoredFlag";
 import { useTaskSession } from "@/hooks/useTaskSession";
@@ -52,6 +62,9 @@ export interface AccessPilotAppProps {
   client?: TaskClient;
 }
 
+const noopSubscribe = () => () => undefined;
+const SERVER_MODE = process.env.NEXT_PUBLIC_TASK_CLIENT === "http" ? "live" : "demo";
+
 /** Example goals offered before the first task. Choosing one only fills in the goal box. */
 const SUGGESTED_GOALS = [
   "Help me complete this scholarship application.",
@@ -76,6 +89,13 @@ export function AccessPilotApp({ client }: AccessPilotAppProps) {
   );
 }
 
+/** A dictated website address ("example.org/apply", "https://…"), normalized to https. */
+function asWebAddress(text: string): string | null {
+  const candidate = text.trim().replace(/[.,!?]$/, "");
+  if (!/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(candidate)) return null;
+  return /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
+}
+
 interface TaskWorkspaceProps {
   client?: TaskClient | undefined;
 }
@@ -84,7 +104,13 @@ type MobilePane = "chat" | "browser";
 
 function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
   const [client] = useState<TaskClient>(() => injected ?? createTaskClientFromEnvironment());
-  const mode = client instanceof HttpTaskClient ? "live" : "demo";
+  // The server can't see `?mock=`, so it renders the mode the environment implies; the browser
+  // then switches to the real one without a hydration mismatch.
+  const mode = useSyncExternalStore(
+    noopSubscribe,
+    () => (client instanceof HttpTaskClient ? "live" : "demo"),
+    () => SERVER_MODE,
+  );
   const { announce } = useAnnouncer();
   const [settings, updateSettings] = useSettings();
   const [theme, setTheme] = useTheme();
@@ -115,8 +141,39 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
 
   const [url, setUrl] = useState("");
   const [goal, setGoal] = useState("");
+  // Words heard during a hand-off may be a spoken password; never echo them on screen.
+  const [hideHeard, setHideHeard] = useState(false);
   const statusRef = useRef<HTMLHeadingElement>(null);
+  const statusPanelRef = useRef<HTMLElement>(null);
+  const errorHeadingRef = useRef<HTMLHeadingElement>(null);
+  const tipShown = useRef(false);
   const id = useId();
+  const stickyFits = useStickyFits(statusPanelRef, active);
+
+  // When the focused control disappears (Start, Continue, Try again, Stop, Send), move focus to a
+  // sensible heading instead of letting it fall to the page.
+  useFocusRescue(() => (state.status === "failed" ? errorHeadingRef : statusRef), [state]);
+
+  // A new failure takes focus from the status area so "Try again" is one Tab away.
+  const failed = state.status === "failed";
+  useEffect(() => {
+    if (!failed) return;
+    const focused = document.activeElement;
+    const inStatus = focused === document.body || statusPanelRef.current?.contains(focused);
+    if (inStatus && !document.querySelector("dialog[open]")) errorHeadingRef.current?.focus();
+  }, [failed]);
+
+  // An approval question always comes first: other dialogs close when it arrives (their own
+  // close handlers then reset their open state).
+  const approvalOpen = state.approval !== null;
+
+  // Leaving mid-task loses the user's view of a browser that may still be acting for them.
+  useEffect(() => {
+    if (!active) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [active]);
   const sidebarId = `${id}-sidebar`;
   const browserPanelId = `${id}-browser`;
 
@@ -137,13 +194,9 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
   }, [state]);
 
   useEffect(() => {
-    document.documentElement.toggleAttribute("data-task-active", active);
+    document.documentElement.toggleAttribute("data-task-active", stickyFits);
     return () => document.documentElement.removeAttribute("data-task-active");
-  }, [active]);
-
-  const announcePolite = useCallback((text: string) => announce(text, "polite"), [announce]);
-  const working = state.status === "planning" || state.status === "running";
-  const stillWorking = useStillWorking(working, state.lastSeq, announcePolite);
+  }, [stickyFits]);
 
   /** Shows in the live region and, unless the user's own screen reader is on, speaks it. */
   const say = useCallback(
@@ -154,6 +207,22 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     [announce, speak],
   );
 
+  /**
+   * A direct answer to something the user just asked: never swallowed by the duplicate filter,
+   * and spoken ahead of narration that queued up while the microphone was on.
+   */
+  const reply = useCallback(
+    (text: string, priority: NarrationPriority) => {
+      announce(text, priority, { force: true });
+      speak(text, priority, { front: true });
+    },
+    [announce, speak],
+  );
+
+  const sayPolite = useCallback((text: string) => say(text, "polite"), [say]);
+  const working = state.status === "planning" || state.status === "running";
+  const stillWorking = useStillWorking(working, state.lastSeq, sayPolite);
+
   const handleTranscript = (text: string) => {
     const command = parseVoiceCommand(text, {
       approvalOpen: state.approval !== null,
@@ -162,7 +231,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
     switch (command.kind) {
       case "stop":
         if (active) void session.stop();
-        else say("Nothing is running.", "polite");
+        else reply("Nothing is running.", "polite");
         return;
       case "approve":
         void session.approve();
@@ -171,7 +240,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         void session.deny("Declined by voice");
         return;
       case "unclear_approval":
-        say(
+        reply(
           `I heard “${text}”, which isn't a clear yes or no, so nothing was submitted. Say “approve” to submit, or “don't submit”.`,
           "assertive",
         );
@@ -181,39 +250,97 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         return;
       case "describe_page":
         if (!session.describePage()) {
-          say("I haven't looked at a page yet. Start a task first.", "polite");
+          reply("I haven't looked at a page yet. Start a task first.", "polite");
         }
         return;
       case "continue":
         void session.resume();
         return;
+      case "no_approval_pending":
+        reply("There's nothing waiting for your approval right now.", "polite");
+        return;
+      case "nothing_to_continue":
+        reply("AccessPilot isn't waiting for you right now.", "polite");
+        return;
+      case "start_task":
+        startFromVoice();
+        return;
+      case "clear_goal":
+        if (active) break;
+        setGoal("");
+        reply("Cleared the goal box.", "polite");
+        return;
       case "none":
-        if (active) {
-          say(
-            "AccessPilot is working on a task. Say “stop” to stop it, or wait for it to finish.",
-            "polite",
-          );
-          return;
-        }
-        setGoal(command.text);
-        say(
-          `Heard: ${command.text}. It's in the goal box. Edit it if you need to, then press Start task.`,
-          "polite",
-        );
+        break;
     }
+    if (state.status === "awaiting_user") {
+      setHideHeard(true);
+      reply(
+        "AccessPilot is waiting for you. Finish the step in the browser window, then say “continue”, or say “stop”.",
+        "polite",
+      );
+      return;
+    }
+    if (active) {
+      reply(
+        "AccessPilot is working on a task. Say “stop” to stop it, or wait for it to finish.",
+        "polite",
+      );
+      return;
+    }
+    if (command.kind !== "none") return;
+    const spokenUrl = asWebAddress(command.text);
+    if (spokenUrl !== null) {
+      setUrl(spokenUrl);
+      reply(`Put ${spokenUrl} in the website address box.`, "polite");
+      return;
+    }
+    const added = goal.trim() !== "";
+    setGoal(added ? `${goal.trim()} ${command.text}` : command.text);
+    reply(
+      added
+        ? `Added to the goal: ${command.text}. Say “start task” or press Start task when it's ready, or say “clear the goal” to start over.`
+        : `Heard: ${command.text}. It's in the goal box. Edit it if you need to, then say “start task” or press Start task.`,
+      "polite",
+    );
+  };
+
+  const startFromVoice = () => {
+    if (active) {
+      reply("A task is already running. Say “stop” first if you want to start over.", "polite");
+      return;
+    }
+    const parsed = startTaskRequestSchema.safeParse({ url, goal });
+    if (!parsed.success) {
+      reply(
+        `I can't start yet. ${parsed.error.issues.map((issue) => issue.message).join(" ")}`,
+        "assertive",
+      );
+      return;
+    }
+    start(parsed.data);
   };
 
   const recognition = useSpeechRecognition({
     onFinal: handleTranscript,
-    onSpeechStart: cancelSpeech,
     onListeningChange: (listening) => {
-      // Never talk over the microphone: hold speech while listening, resume after.
+      // Never talk over the microphone: hold speech while listening (keeping what was queued)
+      // and resume afterwards.
       holdSpeech(listening);
-      if (listening) announce("Listening…", "polite");
+      if (listening) {
+        setHideHeard(false);
+        announce("Listening…", "polite");
+      }
     },
-    onError: (error) => announce(error.message, "assertive"),
+    onNothingHeard: () => reply("I didn't hear anything. Try again, or type instead.", "polite"),
+    onError: (error) => reply(error.message, "assertive"),
   });
   const { abort: abortListening } = recognition;
+
+  // The microphone was for answering the question; once it is gone, stop listening.
+  useEffect(() => {
+    if (!approvalOpen) abortListening();
+  }, [approvalOpen, abortListening]);
 
   const toggleMic = () => {
     if (!recognition.supported) {
@@ -225,14 +352,18 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
   };
 
   const repeat = () => {
-    if (!session.repeatLastNarration()) say("There's nothing to repeat yet.", "polite");
+    if (!session.repeatLast()) reply("There's nothing to repeat yet.", "polite");
   };
 
   const { stop: stopSession } = session;
   const stop = useCallback(() => {
     abortListening();
+    if (!active) {
+      reply("Nothing is running.", "polite");
+      return;
+    }
     void stopSession();
-  }, [abortListening, stopSession]);
+  }, [abortListening, active, reply, stopSession]);
 
   const showHelp = useCallback(() => setHelpOpen(true), []);
 
@@ -246,6 +377,8 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
       // Never stack a second dialog on top of an approval question.
       handler: () => {
         if (state.approval === null) showHelp();
+        else
+          announce("Answer the approval question first. Escape means don't submit.", "assertive");
       },
     },
   ]);
@@ -284,9 +417,26 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
   };
 
   // The details saved in Settings travel with each new task; nothing is sent when they are empty.
-  const start = (input: StartTaskRequest) => {
+  const withDetails = (input: StartTaskRequest): StartTaskRequest => {
     const details = profileForTask(profileStore.getSnapshot());
-    void session.start(details ? { ...input, details } : input);
+    return details ? { ...input, details } : input;
+  };
+
+  const start = (input: StartTaskRequest) => {
+    if (!settings.firstRunDone && speech.supported && !tipShown.current) {
+      tipShown.current = true;
+      announce(
+        "Tip: if you use a screen reader, turn on “I use my own screen reader” in Speech settings so you don't hear everything twice.",
+        "polite",
+      );
+    }
+    void session.start(withDetails(input));
+  };
+
+  const sendFollowUp = (text: string) => {
+    const result = session.sendFollowUp(text, url, profileForTask(profileStore.getSnapshot()));
+    if (result.ok) setGoal(text.trim());
+    return result;
   };
 
   const { reset: resetSession } = session;
@@ -351,7 +501,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
           supported={recognition.supported}
           listening={recognition.listening}
           interim={recognition.interim}
-          transcript={recognition.transcript}
+          transcript={hideHeard ? "" : recognition.transcript}
           error={recognition.error}
           onToggle={toggleMic}
         />
@@ -452,17 +602,18 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
             className={`min-w-0 flex-1 focus:outline-none lg:overflow-y-auto ${pane === "chat" ? "" : "max-lg:hidden"}`}
           >
             <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
-              {!settings.firstRunDone && <FirstRunSpeechPrompt onChoose={chooseSpeechMode} />}
+              {!settings.firstRunDone && speech.supported && (
+                <FirstRunSpeechPrompt onChoose={chooseSpeechMode} />
+              )}
 
               {!taskStarted && composer}
 
               <section
+                ref={statusPanelRef}
                 aria-labelledby={`${id}-status-heading`}
                 className={`rounded-card border bg-elevated p-5 transition-shadow duration-200 sm:px-6 ${
-                  active
-                    ? "z-10 border-accent/30 shadow-elevated [@media(min-height:36rem)]:sticky [@media(min-height:36rem)]:top-0"
-                    : "border-border"
-                }`}
+                  active ? "border-accent/30 shadow-elevated" : "border-border"
+                } ${stickyFits ? "sticky top-0 z-10" : ""}`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex min-w-0 flex-1 basis-56 items-start gap-3">
@@ -501,12 +652,32 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                       >
                         Status
                       </h2>
-                      <p className="text-lg font-medium leading-snug tracking-tight">
+                      <p
+                        className={
+                          state.status === "idle"
+                            ? "text-sm text-muted"
+                            : "text-lg font-medium leading-snug tracking-tight"
+                        }
+                      >
                         {statusSentence(state)}
                       </p>
                     </div>
                   </div>
-                  {active && <StopButton onStop={stop} stopping={state.stopping} />}
+                  {active && (
+                    // Stop comes first: it is the control that must always be quickest to reach.
+                    <div className="grid w-full grid-cols-2 items-start gap-2 sm:flex sm:w-auto sm:flex-wrap max-sm:[&_button]:w-full">
+                      <StopButton onStop={stop} stopping={state.stopping} />
+                      <VoiceControl
+                        compact
+                        supported={recognition.supported}
+                        listening={recognition.listening}
+                        interim={recognition.interim}
+                        transcript=""
+                        error={recognition.error}
+                        onToggle={toggleMic}
+                      />
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -528,7 +699,12 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                   <div className="flex items-start gap-3">
                     <AlertIcon className="mt-0.5 size-5 shrink-0 text-danger" />
                     <div className="space-y-1">
-                      <h2 id={`${id}-error-heading`} className="text-base font-semibold">
+                      <h2
+                        ref={errorHeadingRef}
+                        id={`${id}-error-heading`}
+                        tabIndex={-1}
+                        className="text-base font-semibold focus:outline-none focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+                      >
                         The task didn&apos;t finish
                       </h2>
                       <p className="text-sm">{state.error.message}</p>
@@ -538,7 +714,7 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                     {state.error.recoverable && state.request && (
                       <button
                         type="button"
-                        onClick={() => void session.retry()}
+                        onClick={() => state.request && start(state.request)}
                         className={buttonStyles.primary}
                       >
                         Try again
@@ -560,9 +736,10 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                 </div>
               )}
 
-              <Chat entries={state.log} busy={active} onSend={session.sendFollowUp} />
+              <Chat entries={state.log} busy={active} onSend={sendFollowUp} />
 
-              {taskStarted && composer}
+              {/* While a task runs the form can't be used; the microphone sits beside Stop instead. */}
+              {taskStarted && !active && composer}
             </div>
           </main>
 
@@ -596,13 +773,25 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
         returnFocusRef={statusRef}
         voiceHint={
           recognition.supported
-            ? `You can also press ${SHORTCUT_LABELS.mic} and say “approve” or “don't submit”.`
+            ? `You can also answer by voice: press Answer by voice or ${SHORTCUT_LABELS.mic} and say “approve” or “don't submit”.`
+            : undefined
+        }
+        voice={
+          recognition.supported
+            ? {
+                listening: recognition.listening,
+                error: recognition.error?.message ?? null,
+                onToggle: toggleMic,
+              }
             : undefined
         }
       />
-      <KeyboardShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <KeyboardShortcutsDialog
+        open={helpOpen && !approvalOpen}
+        onClose={() => setHelpOpen(false)}
+      />
       <SettingsDialog
-        open={settingsOpen}
+        open={settingsOpen && !approvalOpen}
         onClose={() => setSettingsOpen(false)}
         theme={theme}
         onThemeChange={setTheme}

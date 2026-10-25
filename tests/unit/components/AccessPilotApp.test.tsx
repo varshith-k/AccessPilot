@@ -92,7 +92,9 @@ describe("AccessPilotApp", () => {
     const stop = vi.spyOn(client, "stop");
     await advance(5000);
     expect(screen.getByText(/^Step 1 of about 6/, { selector: "p.text-lg" })).toBeVisible();
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "Website address" }), {
+    // Any text field: the form itself steps aside while a task runs.
+    const field = document.body.appendChild(document.createElement("input"));
+    fireEvent.keyDown(field, {
       code: "KeyS",
       altKey: true,
       shiftKey: true,

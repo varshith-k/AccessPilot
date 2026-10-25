@@ -47,8 +47,15 @@ test("Alt+Shift+S stops the task from inside a text field", async ({ page }) => 
   await page.getByRole("button", { name: "Start task" }).click();
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible();
 
-  await page.getByLabel("What do you want to get done?").focus();
+  // Any text field counts; the task form itself steps aside while a task runs.
+  await page.evaluate(() => {
+    const field = document.body.appendChild(document.createElement("input"));
+    field.setAttribute("aria-label", "Scratch field");
+    field.focus();
+  });
+  await page.keyboard.type("abc");
   await page.keyboard.press("Alt+Shift+S");
+  await expect(page.getByLabel("Scratch field")).toHaveValue("abc");
   await expect(statusLine(page)).toHaveText(/^Stopped\./);
   await expect(page).toHaveTitle("Stopped — AccessPilot");
 });

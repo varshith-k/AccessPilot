@@ -22,6 +22,7 @@ export function WarningList({ warnings, onDismiss }: WarningListProps) {
             <span>
               <span className="font-medium">Warning: </span>
               {warning.message}
+              {warning.count > 1 && ` (${warning.count} times)`}
             </span>
           </span>
           <button

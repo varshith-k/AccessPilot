@@ -41,6 +41,16 @@ describe("parseVoiceCommand", () => {
       "yes please",
       "okay approve",
       "go ahead and submit",
+      // Clear intents found by user testing that used to re-ask.
+      "yeah sure",
+      "sure",
+      "go ahead",
+      "I approve this",
+      "approved approved",
+      "yes yes",
+      "yep yep",
+      "uh yes",
+      "um approve",
     ])("approves on %s while the dialog is open", (text) => {
       expect(parseVoiceCommand(text, approval)).toEqual({ kind: "approve" });
     });
@@ -53,6 +63,10 @@ describe("parseVoiceCommand", () => {
       "dont submit it",
       "no thank you",
       "no, don't submit",
+      "please don't",
+      "cancel that",
+      "nah",
+      "uh no",
     ])("denies on %s while the dialog is open", (text) => {
       expect(parseVoiceCommand(text, approval)).toEqual({ kind: "deny" });
     });
@@ -65,6 +79,13 @@ describe("parseVoiceCommand", () => {
       "I think so",
       "approve the other one",
       "yes I want to change the program",
+      "approve... no wait",
+      "no yes",
+      "yes no",
+      "sure, but not yet",
+      "go ahead and change it",
+      "okay",
+      "uh",
       "",
     ])("never approves ambiguous input: %j", (text) => {
       const result = parseVoiceCommand(text, approval);
@@ -72,10 +93,10 @@ describe("parseVoiceCommand", () => {
       if (text !== "") expect(result).toEqual({ kind: "unclear_approval" });
     });
 
-    it("ignores approval words when no dialog is open", () => {
-      expect(parseVoiceCommand("yes", idle)).toEqual({ kind: "none", text: "yes" });
-      expect(parseVoiceCommand("approve", handoff)).toEqual({ kind: "none", text: "approve" });
-      expect(parseVoiceCommand("don't submit", idle).kind).toBe("none");
+    it("explains approval words when no dialog is open instead of treating them as dictation", () => {
+      expect(parseVoiceCommand("yes", idle)).toEqual({ kind: "no_approval_pending" });
+      expect(parseVoiceCommand("approve", handoff)).toEqual({ kind: "no_approval_pending" });
+      expect(parseVoiceCommand("don't submit", idle)).toEqual({ kind: "no_approval_pending" });
     });
   });
 
@@ -99,8 +120,15 @@ describe("parseVoiceCommand", () => {
     it("continue works only during a hand-off", () => {
       expect(parseVoiceCommand("Continue", handoff)).toEqual({ kind: "continue" });
       expect(parseVoiceCommand("I'm done", handoff)).toEqual({ kind: "continue" });
-      expect(parseVoiceCommand("continue", idle)).toEqual({ kind: "none", text: "continue" });
+      expect(parseVoiceCommand("continue", idle)).toEqual({ kind: "nothing_to_continue" });
       expect(parseVoiceCommand("continue", approval)).toEqual({ kind: "unclear_approval" });
+    });
+
+    it("start task and clear goal", () => {
+      expect(parseVoiceCommand("Start task", idle)).toEqual({ kind: "start_task" });
+      expect(parseVoiceCommand("start the task please", idle)).toEqual({ kind: "start_task" });
+      expect(parseVoiceCommand("start", approval)).toEqual({ kind: "unclear_approval" });
+      expect(parseVoiceCommand("clear the goal", idle)).toEqual({ kind: "clear_goal" });
     });
   });
 

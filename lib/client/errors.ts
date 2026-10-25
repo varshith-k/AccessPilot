@@ -46,3 +46,16 @@ export function userMessageFor(error: unknown, fallback: string): string {
   if (isTaskClientError(error)) return error.message;
   return fallback;
 }
+
+/** How a failed approve, deny, or resume should be handled; see `ActionFailure`. */
+export function actionFailureFor(error: unknown): "retry" | "gone" | "moved_on" {
+  if (!isTaskClientError(error) || error.kind !== "http") return "retry";
+  if (error.status === 404) return "gone";
+  if (error.status === 409) return "moved_on";
+  return "retry";
+}
+
+/** A request the server rejected as invalid will fail the same way if retried unchanged. */
+export function isRetryable(error: unknown): boolean {
+  return !(isTaskClientError(error) && error.kind === "http" && error.status === 400);
+}

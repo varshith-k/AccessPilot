@@ -3,7 +3,7 @@
  * least 44px tall (40px for compact icon buttons), well above the 24px WCAG 2.2 minimum.
  */
 const buttonBase =
-  "inline-flex min-h-11 select-none items-center justify-center gap-2 rounded-control border px-4 py-2 text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform] duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0";
+  "inline-flex min-h-11 max-w-full select-none flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-control border px-4 py-2 text-center text-sm font-medium break-words transition-[background-color,border-color,color,box-shadow,transform] duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0";
 
 export const buttonStyles = {
   primary: `${buttonBase} border-accent bg-accent text-on-accent shadow-sm hover:brightness-110`,
@@ -25,6 +25,9 @@ export const errorTextStyles = "flex items-start gap-1.5 text-[13px] font-medium
 
 /** Small uppercase section label used above cards and lists. */
 export const eyebrowStyles = "text-xs font-medium uppercase tracking-[0.08em] text-muted";
+
+/** Keyboard shortcut hints are noise on touch screens; aria-keyshortcuts still exposes them. */
+export const shortcutHint = "[@media(pointer:coarse)]:hidden";
 
 export const kbdStyles =
   "inline-flex min-w-6 items-center justify-center rounded-md border border-border bg-subtle px-1.5 py-0.5 font-mono text-xs font-medium text-fg";
