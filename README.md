@@ -39,6 +39,31 @@ scripted mock data, so no backend or API keys are needed.
 
 ---
 
+## Deploy (Railway, auto-deploys from `main`)
+
+The UI, API and agent run as **one long-running service**: tasks live in memory, event streams
+stay open for minutes, and the agent launches a browser. That rules out serverless hosts such as
+Vercel for the backend. Railway runs the included `Dockerfile` (Playwright's image, with Chromium)
+and `railway.json` (one replica, health check, restart on failure).
+
+1. In Railway: **New Project → Deploy from GitHub repo → `varshith-k/AccessPilot`**.
+2. In the service's **Settings → Source**, set the branch to **`main`** and keep **automatic
+   deployments** on. Optionally turn on **Wait for CI**, so a push deploys only after the
+   `Frontend` workflow passes. Every merge to `main` then deploys automatically.
+3. In **Variables**, add `GEMINI_API_KEY` and `TWINLY_API_KEY`. Everything else is set in the
+   Dockerfile.
+4. In **Settings → Networking**, click **Generate Domain**.
+
+Notes:
+
+- Keep **one replica**. Tasks are held in memory, so more replicas would lose them.
+- The browser runs headless on the server, so there is no window to switch to during a hand-off.
+  Fill in **Settings → Your details** (including program, start date and a short statement)
+  before running form tasks.
+- The demo form runs inside the same container: use `http://localhost:4000/scholarship`.
+- `?mock=` is ignored in production builds; the deployed site always uses the real agent.
+- Each form task costs about 12 to 20 Twinly requests (capped at 20 per task). Share the URL with care.
+
 ## Frontend
 
 The Next.js UI handles voice, narration, approvals, stop, progress, and the browser preview. It

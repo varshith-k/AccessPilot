@@ -1,0 +1,12 @@
+node_modules
+.next
+.cache
+coverage
+playwright-report
+test-results
+.usertest
+.git
+.env
+.env.*
+accesspilot-frontend-prompt.md
+AGENTS.md
