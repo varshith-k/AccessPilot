@@ -53,7 +53,7 @@ export interface TaskSession {
   start(input: StartTaskRequest): Promise<void>;
   approve(): Promise<void>;
   deny(reason?: string): Promise<void>;
-  resume(): Promise<void>;
+  resume(answer?: string): Promise<void>;
   stop(): Promise<void>;
   retry(): Promise<void>;
   reset(): void;
@@ -281,27 +281,33 @@ export function useTaskSession({ client, effects, now }: UseTaskSessionOptions):
   const approve = useCallback(() => decide("approve"), [decide]);
   const deny = useCallback((reason?: string) => decide("deny", reason), [decide]);
 
-  const resume = useCallback(async () => {
-    const id = stateRef.current.taskId;
-    if (id === null) return;
-    const result = dispatch({ type: "ui/resume_sent", at: timestamp() });
-    if (result.ignored !== null) return;
-    tell("Continuing.", "polite", false);
-    try {
-      await client.resume(id);
-      dispatch({ type: "ui/resume_succeeded" });
-    } catch (error) {
-      const message = userMessageFor(error, "AccessPilot couldn't continue. Press Continue again.");
-      const failure = actionFailureFor(error);
-      const failed = dispatch({
-        type: "ui/resume_failed",
-        message: failure === "gone" ? TASK_GONE_TEXT : message,
-        at: timestamp(),
-        failure,
-      });
-      if (failed.ignored === null) tell(message, "assertive", true);
-    }
-  }, [client, dispatch, tell, timestamp]);
+  const resume = useCallback(
+    async (answer?: string) => {
+      const id = stateRef.current.taskId;
+      if (id === null) return;
+      const result = dispatch({ type: "ui/resume_sent", at: timestamp() });
+      if (result.ignored !== null) return;
+      tell("Continuing.", "polite", false);
+      try {
+        await client.resume(id, answer);
+        dispatch({ type: "ui/resume_succeeded" });
+      } catch (error) {
+        const message = userMessageFor(
+          error,
+          "AccessPilot couldn't continue. Press Continue again.",
+        );
+        const failure = actionFailureFor(error);
+        const failed = dispatch({
+          type: "ui/resume_failed",
+          message: failure === "gone" ? TASK_GONE_TEXT : message,
+          at: timestamp(),
+          failure,
+        });
+        if (failed.ignored === null) tell(message, "assertive", true);
+      }
+    },
+    [client, dispatch, tell, timestamp],
+  );
 
   const stop = useCallback(async () => {
     // Silence first: stopping must feel instant even if the network is slow.

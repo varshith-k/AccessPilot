@@ -14,6 +14,7 @@ export interface TaskClient {
   ): () => void;
   approve(taskId: string, approvalId: string): Promise<void>;
   deny(taskId: string, approvalId: string, reason?: string): Promise<void>;
-  resume(taskId: string): Promise<void>;
+  /** `answer` is the user's reply when the agent asked for details. */
+  resume(taskId: string, answer?: string): Promise<void>;
   stop(taskId: string): Promise<void>;
 }

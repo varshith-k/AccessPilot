@@ -149,4 +149,6 @@ export interface TaskControl {
   emit(event: EventInput): void;
   waitForApproval(approvalId: string): Promise<ApprovalDecision>;
   waitForResume(): Promise<ResumeDecision>;
+  /** What the user typed or said when they pressed Continue, if anything. Read once. */
+  takeAnswer?(): string | undefined;
 }

@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Handoff } from "@/lib/client/taskState";
 import { HandIcon } from "./ui/icons";
-import { buttonStyles } from "./ui/styles";
+import { buttonStyles, hintStyles, inputStyles, labelStyles } from "./ui/styles";
 
 export interface HandoffPanelProps {
   handoff: Handoff;
-  onContinue(): void;
+  /** `answer` is what the user typed when AccessPilot asked them something. */
+  onContinue(answer?: string): void;
   onStop(): void;
 }
 
@@ -23,6 +24,9 @@ const REASON_TEXT: Record<Handoff["reason"], string> = {
 export function HandoffPanel({ handoff, onContinue, onStop }: HandoffPanelProps) {
   const id = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const [answer, setAnswer] = useState("");
+  // A plain "other" hand-off is AccessPilot asking for details it doesn't have.
+  const asking = handoff.reason === "other";
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -55,8 +59,31 @@ export function HandoffPanel({ handoff, onContinue, onStop }: HandoffPanelProps)
           </p>
         </div>
       </div>
+      {asking && (
+        <div className="space-y-1.5 sm:pl-12">
+          <label htmlFor={`${id}-answer`} className={labelStyles}>
+            Your answer
+          </label>
+          <textarea
+            id={`${id}-answer`}
+            rows={3}
+            maxLength={1000}
+            value={answer}
+            onChange={(event) => setAnswer(event.target.value)}
+            aria-describedby={`${id}-answer-hint`}
+            className={inputStyles}
+          />
+          <p id={`${id}-answer-hint`} className={hintStyles}>
+            AccessPilot fills the form with your answer. Never type passwords or card numbers here.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 sm:pl-12">
-        <button type="button" onClick={onContinue} className={buttonStyles.primary}>
+        <button
+          type="button"
+          onClick={() => onContinue(asking && answer.trim() ? answer.trim() : undefined)}
+          className={buttonStyles.primary}
+        >
           Continue
         </button>
         <button type="button" onClick={onStop} className={buttonStyles.secondary}>

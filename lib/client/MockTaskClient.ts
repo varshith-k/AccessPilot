@@ -151,7 +151,7 @@ export class MockTaskClient implements TaskClient {
     this.decide(taskId, approvalId, "deny");
   }
 
-  async resume(taskId: string): Promise<void> {
+  async resume(taskId: string, _answer?: string): Promise<void> {
     await this.delay();
     const run = this.requireRun(taskId);
     if (run.ended || run.waitingFor?.kind !== "resume") {

@@ -21,6 +21,7 @@ interface InternalRecord extends TaskRecord {
   listeners: Set<(event: TaskEvent) => void>;
   controller: AbortController;
   pending: Pending | null;
+  answer: string | undefined;
 }
 
 /** Finished tasks kept for replay; the oldest are dropped beyond this. */
@@ -47,7 +48,13 @@ export class TaskStore {
       listeners: new Set(),
       controller,
       pending: null,
+      answer: undefined,
       signal: controller.signal,
+      takeAnswer: () => {
+        const answer = record.answer;
+        record.answer = undefined;
+        return answer;
+      },
       emit: (input: EventInput) => {
         if (record.ended) return;
         const event = taskEventSchema.parse({
@@ -133,13 +140,14 @@ export class TaskStore {
     pending.resolve(decision);
   }
 
-  resume(taskId: string): void {
+  resume(taskId: string, answer?: string): void {
     const task = this.get(taskId);
     const pending = task.pending;
     if (task.ended || pending?.kind !== "input") {
       throw new AgentError("invalid_state", "This task is not waiting for you right now.");
     }
     task.pending = null;
+    task.answer = answer?.trim() || undefined;
     pending.resolve("resume");
   }
 

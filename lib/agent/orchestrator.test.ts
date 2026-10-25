@@ -936,3 +936,37 @@ describe("naming the field that was typed into", () => {
     expect(JSON.stringify(run.task.events)).not.toContain("ada@example.com");
   });
 });
+
+describe("answering AccessPilot's questions", () => {
+  it("adds the user's answer to the details it fills from, minus secrets", async () => {
+    const { deps } = makeDeps([done()]);
+    const plan = await deps.planner.planTask("x", "y");
+    deps.planner.planTask = async () => ({
+      ...plan,
+      missingInfo: [{ field: "phone", question: "What is your phone number?" }],
+    });
+    const run = start(deps);
+    await run.waitFor("user_input.required");
+    expect(run.find("user_input.required")?.instructions).toMatch(/Answer here/);
+    run.store.resume(run.task.id, "My phone is 555-0100\nmy password is hunter2");
+    await run.finished;
+    const goal = (deps.actions.nextAction as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+      .goal as string;
+    expect(goal).toContain("555-0100");
+    expect(goal).not.toContain("hunter2");
+  });
+
+  it("carries on as before when Continue is pressed without an answer", async () => {
+    const { deps } = makeDeps([done()]);
+    const plan = await deps.planner.planTask("x", "y");
+    deps.planner.planTask = async () => ({
+      ...plan,
+      missingInfo: [{ field: "phone", question: "Phone?" }],
+    });
+    const run = start(deps);
+    await run.waitFor("user_input.required");
+    run.store.resume(run.task.id);
+    await run.finished;
+    expect(run.last()?.type).toBe("task.completed");
+  });
+});
