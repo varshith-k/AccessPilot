@@ -92,9 +92,12 @@ describe("AccessPilotApp voice", () => {
 
   it("dictation fills the goal box for editing, and the task runs with narration spoken aloud", async () => {
     await startByVoice("scholarship-happy");
-    expect(screen.getByRole("textbox", { name: "What do you want to get done?" })).toHaveValue(
-      "Help me complete this scholarship application",
-    );
+    // The dictated goal became the task's goal (the form steps aside while the task runs).
+    expect(
+      within(screen.getByRole("region", { name: "Conversation history" })).getByText(
+        "Help me complete this scholarship application",
+      ),
+    ).toBeVisible();
     expect(synth.texts).toContain(
       "Heard: Help me complete this scholarship application. It's in the goal box. Edit it if you need to, then say “start task” or press Start task.",
     );
@@ -235,7 +238,8 @@ describe("AccessPilotApp voice", () => {
     const { client } = await startByVoice("scholarship-happy");
     const stop = vi.spyOn(client, "stop");
     await advance(3000);
-    const field = screen.getByRole("textbox", { name: "Website address" });
+    // Any text field: the form itself steps aside while a task runs.
+    const field = document.body.appendChild(document.createElement("input"));
     const sessions = FakeRecognition.instances.length;
     pressShortcut("KeyM", field);
     expect(FakeRecognition.instances).toHaveLength(sessions);

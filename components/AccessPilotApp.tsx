@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { startTaskRequestSchema, type StartTaskRequest } from "@/lib/contracts";
 import { createTaskClientFromEnvironment } from "@/lib/client/createTaskClient";
 import { HttpTaskClient } from "@/lib/client/HttpTaskClient";
@@ -53,6 +61,9 @@ export interface AccessPilotAppProps {
   client?: TaskClient;
 }
 
+const noopSubscribe = () => () => undefined;
+const SERVER_MODE = process.env.NEXT_PUBLIC_TASK_CLIENT === "http" ? "live" : "demo";
+
 /** Example goals offered before the first task. Choosing one only fills in the goal box. */
 const SUGGESTED_GOALS = [
   "Help me complete this scholarship application.",
@@ -92,7 +103,13 @@ type MobilePane = "chat" | "browser";
 
 function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
   const [client] = useState<TaskClient>(() => injected ?? createTaskClientFromEnvironment());
-  const mode = client instanceof HttpTaskClient ? "live" : "demo";
+  // The server can't see `?mock=`, so it renders the mode the environment implies; the browser
+  // then switches to the real one without a hydration mismatch.
+  const mode = useSyncExternalStore(
+    noopSubscribe,
+    () => (client instanceof HttpTaskClient ? "live" : "demo"),
+    () => SERVER_MODE,
+  );
   const { announce } = useAnnouncer();
   const [settings, updateSettings] = useSettings();
   const [theme, setTheme] = useTheme();
@@ -628,12 +645,32 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
                       >
                         Status
                       </h2>
-                      <p className="text-lg font-medium leading-snug tracking-tight">
+                      <p
+                        className={
+                          state.status === "idle"
+                            ? "text-sm text-muted"
+                            : "text-lg font-medium leading-snug tracking-tight"
+                        }
+                      >
                         {statusSentence(state)}
                       </p>
                     </div>
                   </div>
-                  {active && <StopButton onStop={stop} stopping={state.stopping} />}
+                  {active && (
+                    // Stop comes first: it is the control that must always be quickest to reach.
+                    <div className="grid w-full grid-cols-2 items-start gap-2 sm:flex sm:w-auto sm:flex-wrap max-sm:[&_button]:w-full">
+                      <StopButton onStop={stop} stopping={state.stopping} />
+                      <VoiceControl
+                        compact
+                        supported={recognition.supported}
+                        listening={recognition.listening}
+                        interim={recognition.interim}
+                        transcript=""
+                        error={recognition.error}
+                        onToggle={toggleMic}
+                      />
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -694,7 +731,8 @@ function TaskWorkspace({ client: injected }: TaskWorkspaceProps) {
 
               <Chat entries={state.log} busy={active} onSend={sendFollowUp} />
 
-              {taskStarted && composer}
+              {/* While a task runs the form can't be used; the microphone sits beside Stop instead. */}
+              {taskStarted && !active && composer}
             </div>
           </main>
 

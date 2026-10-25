@@ -391,9 +391,11 @@ describe("app flows", () => {
     ).toBeVisible();
     fireEvent.change(message, { target: { value: "Find the deadline" } });
     await user.click(screen.getByRole("button", { name: "Send" }));
-    expect(screen.getByRole("textbox", { name: "What do you want to get done?" })).toHaveValue(
-      "Find the deadline",
-    );
+    expect(
+      within(screen.getByRole("region", { name: "Conversation history" })).getByText(
+        "Find the deadline",
+      ),
+    ).toBeVisible();
     expect(screen.getByText("Starting your task…", { selector: "p.text-lg" })).toBeVisible();
   });
 
@@ -527,6 +529,38 @@ describe("app flows", () => {
       warn();
       warn();
       expect(screen.getByText(/\(3 times\)/)).toBeVisible();
+    });
+  });
+
+  describe("UI polish", () => {
+    it("while a task runs, the form steps aside and the microphone sits beside Stop", async () => {
+      const user = renderApp();
+      await fill(user);
+      await user.click(screen.getByRole("button", { name: "Start task" }));
+      await advance(500);
+      expect(screen.queryByRole("textbox", { name: "Website address" })).toBeNull();
+      const status = screen.getByRole("region", { name: "Status" });
+      expect(within(status).getByRole("button", { name: /^Stop/ })).toBeVisible();
+      expect(
+        within(status).getByRole("button", { name: /^Microphone/ }),
+      ).toHaveAccessibleDescription(/Say your goal, or a command/);
+      await until(() => screen.queryByRole("dialog") !== null);
+      await user.click(screen.getByRole("button", { name: "Approve and submit" }));
+      await until(() => screen.queryByRole("button", { name: "Start a new task" }) !== null);
+      expect(screen.getByRole("textbox", { name: "Website address" })).toBeVisible();
+    });
+
+    it("consecutive AccessPilot messages share one visible header but keep the speaker for screen readers", async () => {
+      const user = renderApp();
+      await fill(user);
+      await user.click(screen.getByRole("button", { name: "Start task" }));
+      await until(() => screen.getAllByText("AccessPilot", { selector: "span" }).length >= 3);
+      const headers = within(screen.getByRole("region", { name: "Conversation history" }))
+        .getAllByText("AccessPilot", { selector: "span" })
+        .map((node) => node.closest("p"));
+      const hidden = headers.filter((p) => p?.classList.contains("sr-only"));
+      expect(hidden.length).toBeGreaterThan(0);
+      expect(hidden.length).toBeLessThan(headers.length);
     });
   });
 });
